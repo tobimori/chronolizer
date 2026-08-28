@@ -190,3 +190,7 @@ Built-in plugins:
 Chinese and Japanese language packs are not included yet.
 
 Business calendars, holidays, times of day, recurrence, and sentence extraction are outside v1. A future business-day feature will use an injected calendar service.
+
+## License
+
+Chronolizer is available under the [MIT License](LICENSE).
