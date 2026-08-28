@@ -7,14 +7,21 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tobimori/chronolizer.git"
+    "url": "git+https://github.com/tobimori/chronolizer.git"
   },
   "files": [
     "dist"
   ],
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./dist/index.mjs",
+    "./ast": "./dist/ast.mjs",
+    "./format": "./dist/format.mjs",
+    "./locales/de": "./dist/locales/de.mjs",
+    "./locales/default": "./dist/locales/default.mjs",
+    "./locales/en": "./dist/locales/en.mjs",
+    "./parse": "./dist/parse.mjs",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -22,6 +29,7 @@
   },
   "scripts": {
     "build": "vp pack",
+    "check:bundle-size": "node tools/check-bundle-size.mjs",
     "dev": "vp pack --watch",
     "test": "vp test",
     "check": "vp check",
@@ -35,6 +43,7 @@
     "effect": "4.0.0-rc.112"
   },
   "devDependencies": {
+    "@arethetypeswrong/core": "0.18.5",
     "@changesets/cli": "3.0.1",
     "@effect/tsgo": "0.38.0",
     "@effect/vitest": "4.0.0-rc.112",
@@ -42,6 +51,7 @@
     "@types/node": "^26.1.1",
     "oxlint": "1.80.0",
     "oxlint-tsgolint": "7.0.2001",
+    "publint": "^0.3.24",
     "typescript": "^7.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:"

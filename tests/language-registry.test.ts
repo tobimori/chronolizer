@@ -2,8 +2,9 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Option, Schema } from "effect";
 
 import { now, shift, startOf } from "../src/ast/constructors.ts";
-import { completePeriod } from "../src/filter/codec.ts";
+import { completePeriod, formatFilter } from "../src/filter/codec.ts";
 import { EnglishContribution, EnglishLanguage } from "../src/locales/en.ts";
+import { DefaultLanguageLayer } from "../src/locales/default.ts";
 import { candidate } from "../src/locales/shared.ts";
 import {
   BaseLanguageContribution,
@@ -130,6 +131,16 @@ const compactPlugin = {
 
 describe("language registry", () => {
   it.effect(
+    "keeps the default language layer English-only",
+    Effect.fn(function* () {
+      const registry = yield* LanguageRegistry;
+      expect((yield* registry.resolve("en")).locale).toBe("en");
+      const error = yield* Effect.flip(registry.resolve("de"));
+      expect(error._tag).toBe("UnsupportedLocaleError");
+    }, Effect.provide(DefaultLanguageLayer)),
+  );
+
+  it.effect(
     "uses BCP 47 language fallback for a regional locale",
     Effect.fn(
       function* () {
@@ -228,6 +239,28 @@ describe("language registry", () => {
           "priority-z",
           "low",
         ]);
+      },
+      Effect.provide(
+        languagePluginsLayer([
+          extensionPlugin("example/low", 0, "low", 1),
+          extensionPlugin("example/z", 10, "priority-z", 2),
+          EnglishLanguage,
+          extensionPlugin("example/a", 10, "priority-a", 3),
+        ]),
+      ),
+    ),
+  );
+
+  it.effect(
+    "uses extension priority when selecting a natural parse",
+    Effect.fn(
+      function* () {
+        const result = yield* parseNatural("special", { locale: "en" });
+        expect(formatFilter(result.range)).toEqual({
+          gte: "now+3d/d",
+          lt: "now+3d/d+1d",
+        });
+        expect(result.alternatives.map((entry) => entry.canonical)).toEqual(["priority-z", "low"]);
       },
       Effect.provide(
         languagePluginsLayer([

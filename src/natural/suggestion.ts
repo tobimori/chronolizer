@@ -43,7 +43,7 @@ const phraseScore = (input: string, phrase: string) => {
   return cost === 0 ? 2 : 2 + cost;
 };
 
-export const completeYearPrefix = (input: string) => {
+const completeYearPrefix = (input: string) => {
   const match = EffectString.match(/(?:^| )(\d{3,4})$/u)(input);
   if (Option.isNone(match)) return [];
   const prefix = match.value[1] ?? "";
@@ -87,8 +87,9 @@ export const completeNaturalPhrases = (
     const score = phraseScore(input, phrase);
     if (score !== undefined) ranked.push({ phrase, score, index });
   }
-  return ranked
-    .sort((left, right) => left.score - right.score || left.index - right.index)
-    .slice(0, limit)
-    .map((entry) => entry.phrase);
+  const sorted = ranked.sort((left, right) => left.score - right.score || left.index - right.index);
+  const matches = sorted.some((entry) => entry.score <= 1)
+    ? sorted.filter((entry) => entry.score <= 1)
+    : sorted;
+  return matches.slice(0, limit).map((entry) => entry.phrase);
 };

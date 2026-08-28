@@ -38,3 +38,76 @@ jobs:
 
       - name: Build package
         run: pnpm build
+
+  bundle-size:
+    name: Check package entry sizes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@v2
+        with:
+          runtime: node@24
+          cache: true
+          install: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build package
+        run: pnpm build
+
+      - name: Check bundle size and isolation
+        run: node tools/check-bundle-size.mjs --json bundle-head.json
+
+      - name: Check out pull request base
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .bundle-base
+
+      - name: Install base dependencies
+        if: github.event_name == 'pull_request'
+        working-directory: .bundle-base
+        run: pnpm install --frozen-lockfile
+
+      - name: Build pull request base
+        if: github.event_name == 'pull_request'
+        working-directory: .bundle-base
+        run: pnpm build
+
+      - name: Measure pull request base
+        if: github.event_name == 'pull_request'
+        run: >-
+          node tools/check-bundle-size.mjs
+          --dist .bundle-base/dist
+          --json bundle-base.json
+          --allow-missing
+
+      - name: Compare bundle sizes
+        if: github.event_name == 'pull_request'
+        id: bundle_compare
+        continue-on-error: true
+        run: |
+          status=0
+          node tools/compare-bundle-size.mjs bundle-base.json bundle-head.json bundle-size.md || status=$?
+          cat bundle-size.md >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      - name: Post bundle-size report
+        if: github.event_name == 'pull_request' && always()
+        continue-on-error: true
+        uses: marocchino/sticky-pull-request-comment@v3
+        with:
+          header: bundle-size
+          path: bundle-size.md
+
+      - name: Enforce bundle-size budget
+        if: github.event_name == 'pull_request' && steps.bundle_compare.outcome == 'failure'
+        run: exit 1

@@ -2,10 +2,26 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   pack: {
+    entry: {
+      index: "src/index.ts",
+      ast: "src/entries/ast.ts",
+      format: "src/entries/format.ts",
+      parse: "src/entries/parse.ts",
+      "locales/en": "src/locales/en.ts",
+      "locales/de": "src/locales/de.ts",
+      "locales/default": "src/locales/default.ts",
+    },
     dts: {
       tsgo: true,
     },
     exports: true,
+    publint: {
+      level: "error",
+    },
+    attw: {
+      profile: "esm-only",
+      level: "error",
+    },
   },
   lint: {
     ignorePatterns: [

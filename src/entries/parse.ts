@@ -1,0 +1,10 @@
+export * from "../language/errors.ts";
+export * from "../language/model.ts";
+export * from "../language/registry.ts";
+export { correctWhitespaceSeparatedText } from "../natural/correction.ts";
+export { parseNatural } from "../natural/parse.ts";
+export type { ParseNaturalOptions } from "../natural/parse.ts";
+export { completeNaturalPhrases } from "../natural/suggestion.ts";
+export { suggestNatural } from "../natural/suggest.ts";
+export type { SuggestNaturalOptions } from "../natural/suggest.ts";
+export * from "../natural/text.ts";

@@ -13,7 +13,6 @@ export * from "./language/errors.ts";
 export * from "./language/model.ts";
 export * from "./language/registry.ts";
 
-export * from "./locales/de.ts";
 export * from "./locales/default.ts";
 export * from "./locales/en.ts";
 

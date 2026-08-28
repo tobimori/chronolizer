@@ -8,6 +8,26 @@ It converts complete English and German date-range expressions to a small date-m
 
 This package uses `effect@4.0.0-rc.112`. Its API can change while Effect v4 is in release-candidate status.
 
+## Package entry points
+
+Chronolizer is side-effect free and publishes separate ESM entry points:
+
+```ts
+import { parseFilter, resolve } from "chronolizer/ast";
+import { parseNatural, suggestNatural } from "chronolizer/parse";
+import { formatNatural } from "chronolizer/format";
+import { EnglishLanguageLayer } from "chronolizer/locales/en";
+```
+
+- `chronolizer/ast` contains the AST, compact filter codec, and resolver.
+- `chronolizer/parse` contains natural-text parsing, autocomplete, and language plugins. It does not load natural rendering.
+- `chronolizer/format` contains AST-to-natural rendering. It does not load parsing or autocomplete.
+- `chronolizer/locales/en`, `chronolizer/locales/de`, and `chronolizer/locales/default` expose language packs separately.
+- `chronolizer` and `chronolizer/locales/default` include English only.
+- Every non-English language must be imported from its own locale subpath.
+
+The package build runs Publint and Are the Types Wrong. CI also checks transitive gzip limits and rejects a parse entry that imports formatting code, a format entry that imports parsing code, or an AST entry that imports either natural-language capability.
+
 ## Main concepts
 
 - Effect Schema owns the date AST, filter data, results, and errors.
@@ -98,7 +118,8 @@ This option rejects relative forms such as `next month`, `this year`, and `in 3 
 ## Filter to natural language
 
 ```ts
-import { DefaultLanguageLayer, formatNatural, parseFilter } from "chronolizer";
+import { formatNatural, parseFilter } from "chronolizer";
+import { GermanLanguageLayer } from "chronolizer/locales/de";
 import { Effect } from "effect";
 
 const run = Effect.fn(function* () {
@@ -108,7 +129,7 @@ const run = Effect.fn(function* () {
   });
 
   return yield* formatNatural(range, { locale: "de" });
-}, Effect.provide(DefaultLanguageLayer));
+}, Effect.provide(GermanLanguageLayer));
 
 const program = run();
 
@@ -208,7 +229,9 @@ Built-in plugins:
 
 - `EnglishLanguage`
 - `GermanLanguage`
-- `DefaultLanguageLayer`
+- `DefaultLanguageLayer` (English only)
+
+Import every non-English language from its locale subpath. This keeps the default bundle small and makes language selection explicit.
 
 Chinese and Japanese language packs are not included yet.
 
