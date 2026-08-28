@@ -141,13 +141,13 @@ const pad = (value: number) => String(value).padStart(2, "0");
 export const isoDate = (year: number, month: number, day: number) =>
   `${String(year).padStart(4, "0")}-${pad(month)}-${pad(day)}`;
 
-export const nextDay = (year: number, month: number, day: number) => {
+const nextDay = (year: number, month: number, day: number) => {
   if (day < daysInMonth(year, month)) return isoDate(year, month, day + 1);
   if (month < 12) return isoDate(year, month + 1, 1);
   return isoDate(year + 1, 1, 1);
 };
 
-export const previousDay = (year: number, month: number, day: number) => {
+const previousDay = (year: number, month: number, day: number) => {
   if (day > 1) return isoDate(year, month, day - 1);
   if (month > 1) return isoDate(year, month - 1, daysInMonth(year, month - 1));
   return isoDate(year - 1, 12, 31);
@@ -345,7 +345,7 @@ export const openBoundaryCandidate = (
   return Option.none<NaturalCandidate>();
 };
 
-export const expressionDates = (range: DateRangeExpr) => {
+const expressionDates = (range: DateRangeExpr) => {
   const filter = formatFilter(range);
   const expressions = [filter.gt, filter.gte, filter.lt, filter.lte];
   const dates = new Set<string>();
