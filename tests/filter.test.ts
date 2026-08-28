@@ -18,6 +18,21 @@ import { DateRangeFromFilter, InstantExpressionFromString } from "../src/filter/
 const runParse = (input: string) => Effect.runSync(parseInstantExpression(input));
 
 describe("filter expressions", () => {
+  it.each([
+    "now",
+    "2025-01-01",
+    "now+1d",
+    "now-2w",
+    "now+3M",
+    "now-4q",
+    "now+5y",
+    "now/d/w/M/q/y",
+    "2025-12-31||+1d/y",
+    `now+${Number.MAX_SAFE_INTEGER}d`,
+  ])("round-trips canonical expression %s", (input) => {
+    expect(formatInstantExpression(runParse(input))).toBe(input);
+  });
+
   it("preserves operation order through parse and print", () => {
     const input = "now-1y/y+1M-2d";
     expect(formatInstantExpression(runParse(input))).toBe(input);
@@ -41,13 +56,25 @@ describe("filter expressions", () => {
     }),
   );
 
+  it("removes shifts that cancel during normalization", () => {
+    const expression = runParse("now+3M-3M");
+    expect(formatInstantExpression(normalizeInstant(expression))).toBe("now");
+  });
+
   it.each([
+    ["", 0, '"now" or an ISO date (YYYY-MM-DD)'],
+    ["today", 0, '"now" or an ISO date (YYYY-MM-DD)'],
     ["2025-01-01+1M", 10, '"||" before date operations'],
+    ["2025-01-01||", 12, 'an operation beginning with "+", "-", or "/"'],
     ["now+0d", 4, "a positive integer without a leading zero"],
     ["now+01d", 4, "a positive integer without a leading zero"],
+    ["now+", 4, "a positive integer without a leading zero"],
+    ["now+1", 5, "a date unit: d, w, M, q, or y"],
     ["now/m", 4, "a date unit: d, w, M, q, or y"],
+    ["now+9007199254740992d", 4, "a safe positive integer"],
     ["2025-02-29", 0, '"now" or an ISO date (YYYY-MM-DD)'],
     ["now ", 3, 'an operation beginning with "+", "-", or "/"'],
+    ["now||+1d", 3, 'an operation beginning with "+", "-", or "/"'],
   ])("rejects non-canonical expression %s", (input, offset, expected) => {
     const error = Effect.runSync(Effect.flip(parseInstantExpression(input)));
     expect(error).toMatchObject({ offset, expected });
@@ -55,6 +82,25 @@ describe("filter expressions", () => {
 });
 
 describe("date filters", () => {
+  it.effect("round-trips all bound relation combinations", () =>
+    Effect.gen(function* () {
+      const filters = [
+        { gt: "now-1d", lt: "now" },
+        { gt: "now-1d", lte: "now" },
+        { gte: "now-1d", lt: "now" },
+        { gte: "now-1d", lte: "now" },
+        { gt: "now" },
+        { gte: "now" },
+        { lt: "now" },
+        { lte: "now" },
+      ] as const;
+      for (const filter of filters) {
+        const range = yield* parseFilter(filter);
+        expect(formatFilter(range)).toEqual(filter);
+      }
+    }),
+  );
+
   it("round-trips the unit and relative-direction matrix", () => {
     for (const unit of Unit.literals) {
       for (const amount of [-2, -1, 1, 2]) {
@@ -96,7 +142,19 @@ describe("date filters", () => {
   it("rejects conflicting or empty filters at the Schema boundary", () => {
     const isDateFilter = Schema.is(DateFilter);
     expect(isDateFilter({ gt: "now", gte: "now/y" })).toBe(false);
+    expect(isDateFilter({ lt: "now", lte: "now/d" })).toBe(false);
     expect(isDateFilter({})).toBe(false);
     expect(isDateFilter({ lt: "now" })).toBe(true);
   });
+
+  it.effect("reports malformed external filters through the Schema codec", () =>
+    Effect.gen(function* () {
+      const empty = yield* Effect.flip(Schema.decodeEffect(DateRangeFromFilter)({}));
+      const malformed = yield* Effect.flip(
+        Schema.decodeEffect(DateRangeFromFilter)({ gte: "now+0d" }),
+      );
+      expect(empty).toBeDefined();
+      expect(malformed).toBeDefined();
+    }),
+  );
 });

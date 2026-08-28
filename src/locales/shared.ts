@@ -54,6 +54,12 @@ export const nextDay = (year: number, month: number, day: number) => {
   return isoDate(year + 1, 1, 1);
 };
 
+export const previousDay = (year: number, month: number, day: number) => {
+  if (day > 1) return isoDate(year, month, day - 1);
+  if (month > 1) return isoDate(year, month - 1, monthLength(year, month - 1));
+  return isoDate(year - 1, 12, 31);
+};
+
 export const fixedDatePeriod = (value: string, canonical: string) => {
   const year = Number(value.slice(0, 4));
   const month = Number(value.slice(5, 7));

@@ -54,12 +54,20 @@ describe("date-range resolution", () => {
     }),
   );
 
-  it.effect("maps quarter starts to January, April, July, and October", () =>
+  it.effect("maps all quarter starts and ends", () =>
     Effect.gen(function* () {
-      yield* setNow("2025-05-20T10:00:00.000Z");
-      const range = yield* resolveFilter({ gte: "now/q", lt: "now/q+1q" }, "UTC");
-      expect(formatEndpoint(range.lower?.value)).toBe("2025-04-01T00:00:00.000+00:00[UTC]");
-      expect(formatEndpoint(range.upper?.value)).toBe("2025-07-01T00:00:00.000+00:00[UTC]");
+      const cases = [
+        ["2025-02-20T10:00:00.000Z", "2025-01-01", "2025-04-01"],
+        ["2025-05-20T10:00:00.000Z", "2025-04-01", "2025-07-01"],
+        ["2025-09-20T10:00:00.000Z", "2025-07-01", "2025-10-01"],
+        ["2025-12-20T10:00:00.000Z", "2025-10-01", "2026-01-01"],
+      ] as const;
+      for (const [now, lower, upper] of cases) {
+        yield* setNow(now);
+        const range = yield* resolveFilter({ gte: "now/q", lt: "now/q+1q" }, "UTC");
+        expect(formatEndpoint(range.lower?.value), now).toBe(`${lower}T00:00:00.000+00:00[UTC]`);
+        expect(formatEndpoint(range.upper?.value), now).toBe(`${upper}T00:00:00.000+00:00[UTC]`);
+      }
     }),
   );
 
@@ -76,6 +84,59 @@ describe("date-range resolution", () => {
           23 * 60 * 60 * 1_000,
         );
       }
+    }),
+  );
+
+  it.effect("uses the supplied zone to select the current calendar day", () =>
+    Effect.gen(function* () {
+      yield* setNow("2025-01-01T00:30:00.000Z");
+      const newYork = yield* resolveFilter({ gte: "now/d", lt: "now/d+1d" }, "America/New_York");
+      const tokyo = yield* resolveFilter({ gte: "now/d", lt: "now/d+1d" }, "Asia/Tokyo");
+      expect(formatEndpoint(newYork.lower?.value)).toBe(
+        "2024-12-31T00:00:00.000-05:00[America/New_York]",
+      );
+      expect(formatEndpoint(tokyo.lower?.value)).toBe("2025-01-01T00:00:00.000+09:00[Asia/Tokyo]");
+    }),
+  );
+
+  it.effect("uses 25 calendar hours across the autumn daylight-saving transition", () =>
+    Effect.gen(function* () {
+      yield* setNow("2025-10-26T12:00:00.000Z");
+      const range = yield* resolveFilter({ gte: "now/d", lt: "now/d+1d" }, "Europe/Berlin");
+      const lower = range.lower?.value;
+      const upper = range.upper?.value;
+      expect(lower).toBeDefined();
+      expect(upper).toBeDefined();
+      if (lower !== undefined && upper !== undefined) {
+        expect(DateTime.toEpochMillis(upper) - DateTime.toEpochMillis(lower)).toBe(
+          25 * 60 * 60 * 1_000,
+        );
+      }
+    }),
+  );
+
+  it.effect("uses compatible disambiguation for a civil-midnight gap", () =>
+    Effect.gen(function* () {
+      const range = yield* resolveFilter(
+        { gte: "2018-11-04", lt: "2018-11-05" },
+        "America/Sao_Paulo",
+      );
+      expect(formatEndpoint(range.lower?.value)).toBe(
+        "2018-11-04T01:00:00.000-02:00[America/Sao_Paulo]",
+      );
+      expect(formatEndpoint(range.upper?.value)).toBe(
+        "2018-11-05T00:00:00.000-02:00[America/Sao_Paulo]",
+      );
+    }),
+  );
+
+  it.effect("preserves inclusive and exclusive bound relations", () =>
+    Effect.gen(function* () {
+      const range = yield* resolveFilter({ gt: "2025-01-01", lte: "2025-01-02" }, "UTC");
+      expect(range.lower?._tag).toBe("GreaterThan");
+      expect(range.upper?._tag).toBe("LessThanOrEqual");
+      expect(formatEndpoint(range.lower?.value)).toBe("2025-01-01T00:00:00.000+00:00[UTC]");
+      expect(formatEndpoint(range.upper?.value)).toBe("2025-01-02T00:00:00.000+00:00[UTC]");
     }),
   );
 

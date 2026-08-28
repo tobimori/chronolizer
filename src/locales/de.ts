@@ -20,6 +20,7 @@ import {
   monthOfRelativeYear,
   periodRange,
   periodToDateRange,
+  previousDay,
   relativePeriod,
   renderFromPhrases,
 } from "./shared.ts";
@@ -105,7 +106,9 @@ const validYear = (value: string) => {
 };
 
 const parsePeriod = (input: string) => {
-  if (isIsoDate(input)) return Option.some(fixedDatePeriod(input, input));
+  if (isIsoDate(input) && input !== "9999-12-31") {
+    return Option.some(fixedDatePeriod(input, input));
+  }
 
   const yearMatch = EffectString.match(/^\d{4}$/u)(input);
   if (Option.isSome(yearMatch)) {
@@ -243,13 +246,18 @@ const renderGerman = (range: DateRangeExpr) => {
     ...unitPhrases.flatMap((entry) => [entry.current, entry.previous, entry.next]),
     ...months.flatMap((month) => [month, `${month} letzten jahres`, `${month} nächsten jahres`]),
   ];
-  for (const date of expressionDates(range)) {
-    const year = date.slice(0, 4);
-    const month = Number(date.slice(5, 7));
-    const day = date.slice(8, 10);
-    if (day === "01") periods.push(`${months[month - 1]} ${year}`);
-    if (date.slice(5) === "01-01") periods.push(year);
+  const dates = expressionDates(range);
+  const years = new Set(dates.map((date) => date.slice(0, 4)));
+  for (const year of years) {
+    periods.push(...months.map((month) => `${month} ${year}`), year);
+  }
+  for (const date of dates) {
     periods.push(date);
+    if (date !== "0000-01-01") {
+      periods.push(
+        previousDay(Number(date.slice(0, 4)), Number(date.slice(5, 7)), Number(date.slice(8, 10))),
+      );
+    }
   }
   const phrases = [
     ...unitPhrases.map((entry) => entry.toDate),
@@ -260,6 +268,7 @@ const renderGerman = (range: DateRangeExpr) => {
       `bis einschließlich ${period}`,
       `nach ${period}`,
     ]),
+    ...periods.flatMap((lower) => periods.map((upper) => `von ${lower} bis ${upper}`)),
   ];
   return renderFromPhrases(range, phrases, parseGerman);
 };

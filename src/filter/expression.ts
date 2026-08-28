@@ -69,6 +69,9 @@ export const parseInstantExpression = (input: string) =>
         return yield* failAt(input, cursor, '"||" before date operations');
       }
       cursor += 2;
+      if (cursor === input.length) {
+        return yield* failAt(input, cursor, 'an operation beginning with "+", "-", or "/"');
+      }
     }
 
     while (cursor < input.length) {
