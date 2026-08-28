@@ -41,6 +41,7 @@ export default defineConfig({
       "anti-slop/no-conditional-empty-object-spread": "error",
       "anti-slop/no-explicit-return-types": "error",
       "anti-slop/no-known-value-widening": "error",
+      "anti-slop/no-manual-tags": "error",
       "anti-slop/no-module-mocking": "error",
       "anti-slop/no-object-parameters": "error",
       "anti-slop/no-reflect-apply": "error",
