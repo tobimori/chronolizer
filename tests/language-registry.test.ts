@@ -1,9 +1,10 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 
-import { now } from "../src/ast/constructors.ts";
+import { now, shift, startOf } from "../src/ast/constructors.ts";
 import { completePeriod } from "../src/filter/codec.ts";
 import { EnglishContribution, EnglishLanguage } from "../src/locales/en.ts";
+import { candidate } from "../src/locales/shared.ts";
 import { BaseLanguageContribution } from "../src/language/model.ts";
 import type { LanguagePlugin } from "../src/language/model.ts";
 import {
@@ -11,6 +12,7 @@ import {
   LanguageRegistryLayer,
   languagePluginsLayer,
 } from "../src/language/registry.ts";
+import { parseNatural } from "../src/natural/api.ts";
 
 const alternateEnglish = new BaseLanguageContribution({
   locale: "en",
@@ -22,6 +24,23 @@ const alternateEnglish = new BaseLanguageContribution({
 const alternatePlugin = {
   id: "example/alternate-en",
   effect: (context) => Effect.asVoid(context.register("example/alternate-en", alternateEnglish)),
+} satisfies LanguagePlugin;
+
+const ambiguousLanguage = new BaseLanguageContribution({
+  locale: "xx",
+  vocabulary: ["bake", "bike"],
+  parseExact: (input) => {
+    if (input !== "bake" && input !== "bike") return Option.none();
+    const offset = input === "bake" ? 0 : 1;
+    const start = startOf(shift(now(), offset, "day"), "day");
+    return Option.some(candidate(completePeriod(start, shift(start, 1, "day")), input));
+  },
+  render: () => Option.none(),
+});
+
+const ambiguousPlugin = {
+  id: "example/ambiguous",
+  effect: (context) => Effect.asVoid(context.register("example/ambiguous", ambiguousLanguage)),
 } satisfies LanguagePlugin;
 
 describe("language registry", () => {
@@ -49,6 +68,17 @@ describe("language registry", () => {
       const error = yield* Effect.flip(registry.resolve("en"));
       expect(error._tag).toBe("UnsupportedLocaleError");
     }).pipe(Effect.provide(LanguageRegistryLayer)),
+  );
+
+  it.effect("reports an equal-cost typo tie as ambiguous", () =>
+    Effect.gen(function* () {
+      const result = yield* parseNatural("boke", {
+        locale: "xx",
+        typoMode: "tolerant",
+      });
+      expect(result.quality).toBe("ambiguous");
+      expect(result.alternatives).toHaveLength(1);
+    }).pipe(Effect.provide(languagePluginsLayer([ambiguousPlugin]))),
   );
 
   it.effect("keeps a compiled snapshot usable after registration cleanup", () =>
