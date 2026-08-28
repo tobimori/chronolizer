@@ -1,4 +1,4 @@
-import { Array as EffectArray, Effect, Option, Order } from "effect";
+import { Array as EffectArray, Effect, Option, Order, Result } from "effect";
 
 import type { DateRangeExpr } from "../ast/schemas.ts";
 import { rangeKey } from "../filter/codec.ts";
@@ -72,44 +72,36 @@ export const parseNatural = Effect.fn("chronolizer.parseNatural")(function* (
   }
 
   const corrected = language.correct?.(normalized, language.vocabulary) ?? [];
-  const parsedCorrections = EffectArray.map(corrected, (entry) => ({
-    ...entry,
-    candidates: language.parseExact(entry.text),
-  }));
-  const successfulCorrections = EffectArray.filter(
-    parsedCorrections,
-    (entry) => entry.candidates.length > 0,
-  );
+  const parsedCorrections = EffectArray.filterMap(corrected, (correction) => {
+    const candidates = language.parseExact(correction.text);
+    return EffectArray.isReadonlyArrayNonEmpty(candidates)
+      ? Result.succeed({ correction, candidates })
+      : Result.failVoid;
+  });
   const successful = EffectArray.sortWith(
-    successfulCorrections,
-    (entry) => entry.cost,
+    parsedCorrections,
+    (entry) => entry.correction.cost,
     Order.Number,
   );
-  const first = EffectArray.head(successful);
-  if (Option.isNone(first)) {
+  if (!EffectArray.isReadonlyArrayNonEmpty(successful)) {
     return yield* new NaturalLanguageParseError({
       input,
       locale: options.locale,
       message: "No conservative typo correction produced a complete expression",
     });
   }
-  const best = EffectArray.filter(successful, (entry) => entry.cost === first.value.cost);
-  if (!EffectArray.isReadonlyArrayNonEmpty(best)) {
-    return yield* new NaturalLanguageParseError({
-      input,
-      locale: options.locale,
-      message: "No minimum-cost typo correction was available",
-    });
-  }
-  const candidates = EffectArray.flatMap(best, (entry) => entry.candidates);
-  if (!EffectArray.isReadonlyArrayNonEmpty(candidates)) {
-    return yield* new NaturalLanguageParseError({
-      input,
-      locale: options.locale,
-      message: "No corrected input produced a date-range candidate",
-    });
-  }
-  return resultFromCandidates(candidates, EffectArray.headNonEmpty(best).corrections);
+  const first = EffectArray.headNonEmpty(successful);
+  const best = EffectArray.prepend(
+    EffectArray.filter(
+      EffectArray.tailNonEmpty(successful),
+      (entry) => entry.correction.cost === first.correction.cost,
+    ),
+    first,
+  );
+  return resultFromCandidates(
+    EffectArray.flatMap(best, (entry) => entry.candidates),
+    first.correction.corrections,
+  );
 });
 
 export const formatNatural = Effect.fn("chronolizer.formatNatural")(function* (

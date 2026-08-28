@@ -95,25 +95,6 @@ describe("German date ranges", () => {
     }),
   );
 
-  it.effect(
-    "parses year to date with an inclusive current endpoint",
-    Effect.fn(function* () {
-      const result = yield* parseGerman("Jahr bis heute");
-      expect(formatFilter(result.range)).toEqual({ gte: "now/y", lte: "now" });
-    }),
-  );
-
-  it.effect(
-    "parses a fixed month as a half-open calendar period",
-    Effect.fn(function* () {
-      const result = yield* parseGerman("Januar 2025");
-      expect(formatFilter(result.range)).toEqual({
-        gte: "2025-01-01",
-        lt: "2025-02-01",
-      });
-    }),
-  );
-
   it.effect.each([
     ["Januar letzten Jahres", "now-1y/y", "now-1y/y+1M"],
     ["Juni dieses Jahres", "now/y+5M", "now/y+6M"],

@@ -27,14 +27,10 @@ describe("filter expressions", () => {
     "now-4q",
     "now+5y",
     "now/d/w/M/q/y",
+    "now-1y/y+1M-2d",
     "2025-12-31||+1d/y",
     `now+${Number.MAX_SAFE_INTEGER}d`,
   ])("round-trips canonical expression %s", (input) => {
-    expect(formatInstantExpression(runParse(input))).toBe(input);
-  });
-
-  it("preserves operation order through parse and print", () => {
-    const input = "now-1y/y+1M-2d";
     expect(formatInstantExpression(runParse(input))).toBe(input);
   });
 

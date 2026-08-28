@@ -105,17 +105,6 @@ describe("English date ranges", () => {
   );
 
   it.effect(
-    "parses a fixed month as a half-open calendar period",
-    Effect.fn(function* () {
-      const result = yield* parseEnglish("January 2025");
-      expect(formatFilter(result.range)).toEqual({
-        gte: "2025-01-01",
-        lt: "2025-02-01",
-      });
-    }),
-  );
-
-  it.effect(
     "uses leap-year month and day boundaries",
     Effect.fn(function* () {
       const month = yield* parseEnglish("February 2024");

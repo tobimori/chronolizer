@@ -6,13 +6,16 @@ import {
   greaterThanOrEqual,
   lessThan,
   lessThanOrEqual,
+  lowerOpenRange,
   now,
   shift,
   startOf,
+  upperOpenRange,
 } from "../ast/constructors.ts";
-import { InstantExpr, Unit } from "../ast/schemas.ts";
+import { daysInMonth, InstantExpr, Unit } from "../ast/schemas.ts";
 import type { DateRangeExpr } from "../ast/schemas.ts";
 import { formatFilter, rangeKey } from "../filter/codec.ts";
+import { formatInstantExpression } from "../filter/expression.ts";
 import { NaturalCandidate } from "../language/model.ts";
 
 export const Period = Schema.Struct({
@@ -36,6 +39,11 @@ const TrailingPeriod = Schema.Struct({
   amount: TrailingCount,
   unit: Unit,
 });
+
+export const validYear = (value: string) => {
+  const year = Number(value);
+  return Number.isInteger(year) && year >= 1 && year <= 9998 ? year : undefined;
+};
 
 export const parseTrailingCount = (value: string) => {
   const amount = Number(value);
@@ -79,22 +87,15 @@ const pad = (value: number) => String(value).padStart(2, "0");
 export const isoDate = (year: number, month: number, day: number) =>
   `${String(year).padStart(4, "0")}-${pad(month)}-${pad(day)}`;
 
-const leapYear = (year: number) => year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-
-const monthLength = (year: number, month: number) => {
-  if (month === 2) return leapYear(year) ? 29 : 28;
-  return [4, 6, 9, 11].includes(month) ? 30 : 31;
-};
-
 export const nextDay = (year: number, month: number, day: number) => {
-  if (day < monthLength(year, month)) return isoDate(year, month, day + 1);
+  if (day < daysInMonth(year, month)) return isoDate(year, month, day + 1);
   if (month < 12) return isoDate(year, month + 1, 1);
   return isoDate(year + 1, 1, 1);
 };
 
 export const previousDay = (year: number, month: number, day: number) => {
   if (day > 1) return isoDate(year, month, day - 1);
-  if (month > 1) return isoDate(year, month - 1, monthLength(year, month - 1));
+  if (month > 1) return isoDate(year, month - 1, daysInMonth(year, month - 1));
   return isoDate(year - 1, 12, 31);
 };
 
@@ -140,6 +141,32 @@ export const monthOfRelativeYear = (month: number, direction: -1 | 0 | 1, canoni
 export const candidate = (range: DateRangeExpr, canonical: string) =>
   NaturalCandidate.make({ range, canonical });
 
+export const openBoundaryCandidate = (
+  input: string,
+  boundaries: ReadonlyArray<readonly [string, "since" | "before" | "through" | "after"]>,
+  parsePeriod: (input: string) => Option.Option<Period>,
+) => {
+  const boundary = boundaries.find((entry) => input.startsWith(entry[0]));
+  if (boundary === undefined) return Option.none<NaturalCandidate>();
+  const period = parsePeriod(input.slice(boundary[0].length));
+  if (Option.isNone(period)) return Option.none<NaturalCandidate>();
+  const canonical = `${boundary[0]}${period.value.canonical}`;
+  switch (boundary[1]) {
+    case "since":
+      return Option.some(
+        candidate(lowerOpenRange(greaterThanOrEqual(period.value.start)), canonical),
+      );
+    case "before":
+      return Option.some(candidate(upperOpenRange(lessThan(period.value.start)), canonical));
+    case "through":
+      return Option.some(candidate(upperOpenRange(lessThan(period.value.end)), canonical));
+    case "after":
+      return Option.some(
+        candidate(lowerOpenRange(greaterThanOrEqual(period.value.end)), canonical),
+      );
+  }
+};
+
 export const expressionDates = (range: DateRangeExpr) => {
   const filter = formatFilter(range);
   const expressions = [filter.gt, filter.gte, filter.lt, filter.lte];
@@ -152,16 +179,81 @@ export const expressionDates = (range: DateRangeExpr) => {
   return [...dates];
 };
 
-export const renderFromPhrases = (
+export const datedPeriods = (range: DateRangeExpr, months: ReadonlyArray<string>) => {
+  const dates = expressionDates(range);
+  const years = [...new Set(dates.map((date) => date.slice(0, 4)))];
+  return [
+    ...years.flatMap((year) => [...months.map((month) => `${month} ${year}`), year]),
+    ...dates.flatMap((date) =>
+      date === "0000-01-01"
+        ? [date]
+        : [
+            date,
+            previousDay(
+              Number(date.slice(0, 4)),
+              Number(date.slice(5, 7)),
+              Number(date.slice(8, 10)),
+            ),
+          ],
+    ),
+  ];
+};
+
+export const renderPeriodRange = (
   range: DateRangeExpr,
+  toDate: ReadonlyArray<NaturalCandidate>,
   phrases: ReadonlyArray<string>,
-  parse: (input: string) => Option.Option<NaturalCandidate>,
+  parsePeriod: (input: string) => Option.Option<Period>,
+  since: (period: string) => string,
+  before: (period: string) => string,
+  through: (period: string) => string,
+  after: (period: string) => string,
+  between: (lower: string, upper: string) => string,
 ) => {
   const expected = rangeKey(range);
-  for (const phrase of phrases) {
-    const parsed = parse(phrase);
-    if (Option.isSome(parsed) && rangeKey(parsed.value.range) === expected) {
-      return Option.some(parsed.value.canonical);
+  for (const entry of toDate) {
+    if (rangeKey(entry.range) === expected) return Option.some(entry.canonical);
+  }
+
+  const periods = phrases.flatMap((phrase) =>
+    Option.match(parsePeriod(phrase), { onNone: () => [], onSome: (period) => [period] }),
+  );
+  const filter = formatFilter(range);
+  if (filter.gte !== undefined && filter.lt !== undefined) {
+    const exact = periods.find(
+      (period) =>
+        formatInstantExpression(period.start) === filter.gte &&
+        formatInstantExpression(period.end) === filter.lt,
+    );
+    if (exact !== undefined) return Option.some(exact.canonical);
+    const lower = periods.find(
+      (period) => formatInstantExpression(period.start) === filter.gte,
+    )?.canonical;
+    const upper = periods.find(
+      (period) => formatInstantExpression(period.end) === filter.lt,
+    )?.canonical;
+    return lower === undefined || upper === undefined
+      ? Option.none<string>()
+      : Option.some(between(lower, upper));
+  }
+  if (filter.gte !== undefined && filter.lt === undefined && filter.lte === undefined) {
+    for (const period of periods) {
+      if (formatInstantExpression(period.start) === filter.gte) {
+        return Option.some(since(period.canonical));
+      }
+      if (formatInstantExpression(period.end) === filter.gte) {
+        return Option.some(after(period.canonical));
+      }
+    }
+  }
+  if (filter.lt !== undefined && filter.gt === undefined && filter.gte === undefined) {
+    for (const period of periods) {
+      if (formatInstantExpression(period.start) === filter.lt) {
+        return Option.some(before(period.canonical));
+      }
+      if (formatInstantExpression(period.end) === filter.lt) {
+        return Option.some(through(period.canonical));
+      }
     }
   }
   return Option.none<string>();

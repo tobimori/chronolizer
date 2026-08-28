@@ -5,7 +5,7 @@ export type Unit = typeof Unit.Type;
 
 const isLeapYear = (year: number) => year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
 
-const daysInMonth = (year: number, month: number) => {
+export const daysInMonth = (year: number, month: number) => {
   switch (month) {
     case 2:
       return isLeapYear(year) ? 29 : 28;

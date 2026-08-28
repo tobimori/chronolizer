@@ -1,12 +1,6 @@
 import { Effect, Option, String as EffectString } from "effect";
 
-import {
-  boundedRange,
-  greaterThanOrEqual,
-  lessThan,
-  lowerOpenRange,
-  upperOpenRange,
-} from "../ast/constructors.ts";
+import { boundedRange, greaterThanOrEqual, lessThan } from "../ast/constructors.ts";
 import { isIsoDate } from "../ast/schemas.ts";
 import type { DateRangeExpr, Unit } from "../ast/schemas.ts";
 import { BaseLanguageContribution } from "../language/model.ts";
@@ -15,19 +9,20 @@ import { correctWhitespaceSeparatedText } from "../natural/correction.ts";
 import { normalizeNaturalText } from "../natural/text.ts";
 import {
   candidate,
-  expressionDates,
+  datedPeriods,
   fixedDatePeriod,
   fixedMonthPeriod,
   fixedYearPeriod,
   monthOfRelativeYear,
+  openBoundaryCandidate,
   parseTrailingCount,
   periodRange,
   periodToDateRange,
-  previousDay,
   relativePeriod,
-  renderFromPhrases,
+  renderPeriodRange,
   trailingPeriod,
   trailingRange,
+  validYear,
 } from "./shared.ts";
 import type { Period } from "./shared.ts";
 
@@ -111,11 +106,6 @@ const monthNumber = (value: string) => {
   return index === -1 ? undefined : index + 1;
 };
 
-const validYear = (value: string) => {
-  const year = Number(value);
-  return Number.isInteger(year) && year >= 1 && year <= 9998 ? year : undefined;
-};
-
 const parsePeriod = (input: string) => {
   if (isIsoDate(input) && input !== "9999-12-31") {
     return Option.some(fixedDatePeriod(input, input));
@@ -170,45 +160,17 @@ const parsePeriod = (input: string) => {
   return Option.none<Period>();
 };
 
-const boundaryCandidate = (input: string) => {
-  const boundaries = [
-    ["seit ", "since"],
-    ["vor ", "before"],
-    ["bis einschließlich ", "through"],
-    ["nach ", "after"],
-  ] as const;
-  const boundary = boundaries.find((entry) => input.startsWith(entry[0]));
-  if (boundary === undefined) return Option.none<ReturnType<typeof candidate>>();
-  const period = parsePeriod(input.slice(boundary[0].length));
-  if (Option.isNone(period)) return Option.none<ReturnType<typeof candidate>>();
-  switch (boundary[1]) {
-    case "since":
-      return Option.some(
-        candidate(
-          lowerOpenRange(greaterThanOrEqual(period.value.start)),
-          `seit ${period.value.canonical}`,
-        ),
-      );
-    case "before":
-      return Option.some(
-        candidate(upperOpenRange(lessThan(period.value.start)), `vor ${period.value.canonical}`),
-      );
-    case "through":
-      return Option.some(
-        candidate(
-          upperOpenRange(lessThan(period.value.end)),
-          `bis einschließlich ${period.value.canonical}`,
-        ),
-      );
-    case "after":
-      return Option.some(
-        candidate(
-          lowerOpenRange(greaterThanOrEqual(period.value.end)),
-          `nach ${period.value.canonical}`,
-        ),
-      );
-  }
-};
+const boundaryCandidate = (input: string) =>
+  openBoundaryCandidate(
+    input,
+    [
+      ["seit ", "since"],
+      ["vor ", "before"],
+      ["bis einschließlich ", "through"],
+      ["nach ", "after"],
+    ],
+    parsePeriod,
+  );
 
 const parseTrailingPeriod = (input: string) => {
   const match = EffectString.match(
@@ -285,32 +247,19 @@ const renderGerman = (range: DateRangeExpr) => {
   const periods = [
     ...unitPhrases.flatMap((entry) => [entry.current, entry.previous, entry.next]),
     ...months.flatMap((month) => [month, `${month} letzten jahres`, `${month} nächsten jahres`]),
+    ...datedPeriods(range, months),
   ];
-  const dates = expressionDates(range);
-  const years = new Set(dates.map((date) => date.slice(0, 4)));
-  for (const year of years) {
-    periods.push(...months.map((month) => `${month} ${year}`), year);
-  }
-  for (const date of dates) {
-    periods.push(date);
-    if (date !== "0000-01-01") {
-      periods.push(
-        previousDay(Number(date.slice(0, 4)), Number(date.slice(5, 7)), Number(date.slice(8, 10))),
-      );
-    }
-  }
-  const phrases = [
-    ...unitPhrases.map((entry) => entry.toDate),
-    ...periods,
-    ...periods.flatMap((period) => [
-      `seit ${period}`,
-      `vor ${period}`,
-      `bis einschließlich ${period}`,
-      `nach ${period}`,
-    ]),
-    ...periods.flatMap((lower) => periods.map((upper) => `von ${lower} bis ${upper}`)),
-  ];
-  return renderFromPhrases(range, phrases, parseGerman);
+  return renderPeriodRange(
+    range,
+    unitPhrases.map((entry) => candidate(periodToDateRange(entry.unit), entry.toDate)),
+    periods,
+    parsePeriod,
+    (period) => `seit ${period}`,
+    (period) => `vor ${period}`,
+    (period) => `bis einschließlich ${period}`,
+    (period) => `nach ${period}`,
+    (lower, upper) => `von ${lower} bis ${upper}`,
+  );
 };
 
 export const GermanContribution = new BaseLanguageContribution({
