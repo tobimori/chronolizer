@@ -3,7 +3,7 @@ import { Effect } from "effect";
 
 import { formatFilter, parseFilter } from "../src/filter/codec.ts";
 import { EnglishLanguageLayer } from "../src/locales/en.ts";
-import { formatNatural, parseNatural } from "../src/natural/api.ts";
+import { formatNatural, parseNatural, suggestNatural } from "../src/natural/api.ts";
 
 const parseEnglish = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "en", typoMode }).pipe(Effect.provide(EnglishLanguageLayer));
@@ -13,7 +13,72 @@ const parseEnglishWithoutFuture = (input: string) =>
     Effect.provide(EnglishLanguageLayer),
   );
 
+const suggestEnglish = (input: string, limit = 10, allowFuture = true) =>
+  suggestNatural(input, { locale: "en", limit, allowFuture }).pipe(
+    Effect.provide(EnglishLanguageLayer),
+  );
+
 describe("English date ranges", () => {
+  it.effect.each([
+    ["last m", "last month", { gte: "now-1M/M", lt: "now-1M/M+1M" }],
+    ["las m", "last month", { gte: "now-1M/M", lt: "now-1M/M+1M" }],
+    ["jan", "January", { gte: "now/y", lt: "now/y+1M" }],
+    ["jaun", "January", { gte: "now/y", lt: "now/y+1M" }],
+    ["last 3 mon", "last 3 months", { gte: "now-3M", lte: "now" }],
+    ["since jan", "since January", { gte: "now/y" }],
+    ["rest of m", "rest of month", { gte: "now", lt: "now/M+1M" }],
+    ["in 3 y", "in 3 years", { gte: "now+3y/y", lt: "now+3y/y+1y" }],
+    ["yaer to d", "year to date", { gte: "now/y", lte: "now" }],
+  ] as const)(
+    "suggests English completion for %j",
+    Effect.fn(function* (testCase) {
+      const [input, text, filter] = testCase;
+      const [suggestion] = yield* suggestEnglish(input);
+      if (suggestion === undefined) return expect.fail("Expected a suggestion");
+      expect(suggestion.text).toBe(text);
+      expect(formatFilter(suggestion.range)).toEqual(filter);
+    }),
+  );
+
+  it.effect(
+    "completes a partial year and applies the result limit",
+    Effect.fn(function* () {
+      const suggestions = yield* suggestEnglish("january 202", 2);
+      expect(suggestions.map((entry) => entry.text)).toEqual(["January 2020", "January 2021"]);
+    }),
+  );
+
+  it.effect(
+    "does not fuzzy-match a short token",
+    Effect.fn(function* () {
+      expect(yield* suggestEnglish("ls m")).toEqual([]);
+    }),
+  );
+
+  it.effect(
+    "returns no completion when the limit is zero",
+    Effect.fn(function* () {
+      expect(yield* suggestEnglish("last m", 0)).toEqual([]);
+    }),
+  );
+
+  it.effect(
+    "returns only suggestions accepted by strict parsing",
+    Effect.fn(function* () {
+      const suggestions = yield* suggestEnglish("");
+      for (const suggestion of suggestions) {
+        const parsed = yield* parseEnglish(suggestion.text);
+        expect(formatFilter(parsed.range)).toEqual(formatFilter(suggestion.range));
+      }
+    }),
+  );
+
+  it.effect(
+    "removes positive relative completions when future ranges are disabled",
+    Effect.fn(function* () {
+      expect(yield* suggestEnglish("next m", 10, false)).toEqual([]);
+    }),
+  );
   it.effect.each([
     ["today", "now/d", "now/d+1d"],
     ["yesterday", "now-1d/d", "now-1d/d+1d"],

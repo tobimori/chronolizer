@@ -134,6 +134,11 @@ const compileLanguage = (locale: string, registered: ReadonlyArray<RegisteredCon
     ...extensions.map((entry) => entry.contribution.parseExact),
     base.contribution.parseExact,
   ]);
+  const suggesters = Object.freeze(
+    [...extensions.map((entry) => entry.contribution.suggest), base.contribution.suggest].filter(
+      (suggest) => suggest !== undefined,
+    ),
+  );
   const parseExact = (input: string) => {
     const candidates: Array<NaturalCandidate> = [];
     for (const parser of parsers) {
@@ -150,6 +155,8 @@ const compileLanguage = (locale: string, registered: ReadonlyArray<RegisteredCon
       normalize: base.contribution.normalize ?? normalizeNaturalText,
       correct: base.contribution.correct,
       parseExact,
+      suggest: (input: string, limit: number) =>
+        EffectArray.flatMap(suggesters, (suggest) => suggest(input, limit)),
       render: base.contribution.render,
     }),
   );

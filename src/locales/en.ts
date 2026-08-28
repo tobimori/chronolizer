@@ -5,6 +5,12 @@ import type { DateRangeExpr, Unit } from "../ast/schemas.ts";
 import { BaseLanguageContribution } from "../language/model.ts";
 import { defineLanguagePlugin, languagePluginsLayer } from "../language/registry.ts";
 import { correctWhitespaceSeparatedText } from "../natural/correction.ts";
+import {
+  completeNaturalPhrases,
+  fixedCalendarPeriodPhrases,
+  naturalCount,
+  prefixNaturalPhrases,
+} from "../natural/suggestion.ts";
 import { normalizeNaturalText } from "../natural/text.ts";
 import {
   calendarPeriodOffset,
@@ -518,36 +524,75 @@ const parseEnglish = (input: string) => {
   );
 };
 
-const staticPeriods = periodsFromPhrases(
-  [
-    "today",
-    "yesterday",
-    "tomorrow",
-    "this weekend",
-    "last weekend",
-    "next weekend",
-    "the weekend before last",
-    "the weekend after next",
-    ...units.flatMap((entry) => [
-      `this ${entry[0]}`,
-      `last ${entry[0]}`,
-      `next ${entry[0]}`,
-      `start of this ${entry[0]}`,
-      `end of this ${entry[0]}`,
-      `start of last ${entry[0]}`,
-      `end of last ${entry[0]}`,
-      `start of next ${entry[0]}`,
-      `end of next ${entry[0]}`,
-    ]),
-    ...[1, 2, 3, 4].flatMap((quarter) => [
-      `q${quarter}`,
-      `q${quarter} of last year`,
-      `q${quarter} of next year`,
-    ]),
-    ...months.flatMap((month) => [month, `${month} of last year`, `${month} of next year`]),
-  ],
-  parsePeriod,
-);
+const staticPeriodPhrases = [
+  "today",
+  "yesterday",
+  "tomorrow",
+  "this weekend",
+  "last weekend",
+  "next weekend",
+  "the weekend before last",
+  "the weekend after next",
+  ...units.flatMap((entry) => [
+    `this ${entry[0]}`,
+    `last ${entry[0]}`,
+    `next ${entry[0]}`,
+    `start of this ${entry[0]}`,
+    `end of this ${entry[0]}`,
+    `start of last ${entry[0]}`,
+    `end of last ${entry[0]}`,
+    `start of next ${entry[0]}`,
+    `end of next ${entry[0]}`,
+  ]),
+  ...[1, 2, 3, 4].flatMap((quarter) => [
+    `q${quarter}`,
+    `q${quarter} of last year`,
+    `q${quarter} of next year`,
+  ]),
+  ...months.flatMap((month) => [month, `${month} of last year`, `${month} of next year`]),
+];
+
+const staticPeriods = periodsFromPhrases(staticPeriodPhrases, parsePeriod);
+
+const boundaryPrefixes = ["since ", "before ", "through ", "after "];
+
+const countedSuggestions = (input: string) => {
+  const amount = naturalCount(input);
+  if (amount === undefined) return [];
+  return units.flatMap((entry) => {
+    const noun = amount === 1 ? entry[0] : entry[2];
+    return [
+      `last ${amount} ${noun}`,
+      `${amount} ${noun}`,
+      `next ${amount} ${noun}`,
+      `${amount} ${noun} ago`,
+      `in ${amount} ${noun}`,
+    ];
+  });
+};
+
+const englishSuggestionPhrases = [
+  ...units.map((entry) => `${entry[0]} to date`),
+  ...units.map((entry) => `rest of ${entry[0]}`),
+  ...staticPeriodPhrases,
+  ...prefixNaturalPhrases(staticPeriodPhrases, boundaryPrefixes),
+  "until now",
+  "from now",
+];
+
+const suggestEnglish = (input: string, limit: number) => {
+  const fixed = fixedCalendarPeriodPhrases(input, months);
+  return completeNaturalPhrases(
+    input,
+    [
+      ...englishSuggestionPhrases,
+      ...fixed,
+      ...prefixNaturalPhrases(fixed, boundaryPrefixes),
+      ...countedSuggestions(input),
+    ],
+    limit,
+  );
+};
 
 const renderEnglish = (range: DateRangeExpr) => {
   const offset = calendarPeriodOffset(range);
@@ -669,6 +714,7 @@ export const EnglishContribution = new BaseLanguageContribution({
   normalize: normalizeNaturalText,
   correct: correctWhitespaceSeparatedText,
   parseExact: parseEnglish,
+  suggest: suggestEnglish,
   render: renderEnglish,
 });
 

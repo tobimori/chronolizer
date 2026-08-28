@@ -62,6 +62,26 @@ Chronolizer parses the complete input. It does not extract a date phrase from a 
 
 Supported families include named and abbreviated months, named dates, quarters, weekends, period starts and ends, past and future rolling windows, calendar offsets, open boundaries, `now`-bounded ranges, and explicit inclusive connectors. English and German use their own grammar and canonical forms.
 
+## Autocomplete natural language
+
+Use `suggestNatural()` for autocomplete fields. Each Schema-owned suggestion contains canonical display text and the semantic range that it represents:
+
+```ts
+import { DefaultLanguageLayer, suggestNatural } from "chronolizer";
+import { Effect } from "effect";
+
+const program = suggestNatural("last m", {
+  locale: "en",
+  limit: 5,
+}).pipe(Effect.provide(DefaultLanguageLayer));
+
+// [{ text: "last month", range: ... }]
+```
+
+Suggestions support incomplete words, bounded spelling errors, numeric rolling periods, and partial four-digit years. For example, `january 202` suggests `January 2020`, `January 2021`, and later matching years. Every returned suggestion is checked by the exact parser. `allowFuture: false` applies the same positive-relative-range policy as `parseNatural()`.
+
+The default limit is 10. The maximum accepted limit is 100. A nonpositive or invalid limit returns no suggestions.
+
 ### Exclude positive relative ranges
 
 Set `allowFuture: false` to reject expressions whose relative range extends after `now`:
@@ -175,9 +195,12 @@ Language identifiers use canonical BCP 47 base tags. Lookup removes one subtag a
 Each base language owns:
 
 - exact parsing and canonical rendering;
+- autocomplete phrase generation;
 - optional text normalization;
 - its typo-correction strategy, which can be disabled;
 - vocabulary shared with registered language extensions.
+
+Language extensions can add both exact parsers and autocomplete phrases. The registry combines extension suggestions in the same deterministic order as extension parsers. The core accepts only suggestions that one of the compiled exact parsers can parse.
 
 `normalizeNaturalText` and `correctWhitespaceSeparatedText` are available for languages that use whitespace-separated words. A compact-script language can provide character, dictionary, or `Intl.Segmenter` based correction without changing Chronolizer core.
 

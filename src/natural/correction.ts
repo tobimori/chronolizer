@@ -15,7 +15,7 @@ const isProtectedToken = (word: string) =>
   Option.isSome(EffectString.match(/^\d{4}-\d{2}-\d{2}$/u)(word)) ||
   word.length <= 3;
 
-const damerauLevenshtein = (left: string, right: string) => {
+export const damerauLevenshteinDistance = (left: string, right: string) => {
   const rows = left.length + 1;
   const columns = right.length + 1;
   const matrix = Array.from({ length: rows }, () => Array<number>(columns).fill(0));
@@ -51,7 +51,7 @@ const replacementsFor = (word: string, vocabulary: ReadonlyArray<string>) => {
     .filter((candidate) => Math.abs(candidate.length - word.length) <= maximum)
     .map((candidate) => ({
       word: candidate,
-      distance: damerauLevenshtein(word, candidate),
+      distance: damerauLevenshteinDistance(word, candidate),
     }))
     .filter((candidate) => candidate.distance <= maximum);
   if (matches.length === 0) return [];

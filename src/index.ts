@@ -19,6 +19,7 @@ export * from "./locales/en.ts";
 
 export * from "./natural/api.ts";
 export * from "./natural/correction.ts";
+export * from "./natural/suggestion.ts";
 export * from "./natural/text.ts";
 export * from "./resolve/resolve.ts";
 export * from "./resolve/schema.ts";

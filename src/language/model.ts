@@ -43,6 +43,12 @@ export const NaturalCandidate = Schema.Struct({
 });
 export type NaturalCandidate = typeof NaturalCandidate.Type;
 
+export const NaturalSuggestion = Schema.Struct({
+  text: Schema.String,
+  range: DateRangeExpr,
+});
+export type NaturalSuggestion = typeof NaturalSuggestion.Type;
+
 export class BaseLanguageContribution extends Data.TaggedClass("BaseLanguage")<{
   readonly locale: string;
   readonly vocabulary: ReadonlyArray<string>;
@@ -54,6 +60,7 @@ export class BaseLanguageContribution extends Data.TaggedClass("BaseLanguage")<{
       ) => ReadonlyArray<NaturalCorrectionCandidate>)
     | undefined;
   readonly parseExact: (input: string) => Option.Option<NaturalCandidate>;
+  readonly suggest?: (input: string, limit: number) => ReadonlyArray<string>;
   readonly render: (range: DateRangeExprType) => Option.Option<string>;
 }> {}
 
@@ -62,6 +69,7 @@ export class LanguageExtensionContribution extends Data.TaggedClass("LanguageExt
   readonly priority: number;
   readonly vocabulary: ReadonlyArray<string>;
   readonly parseExact: (input: string) => Option.Option<NaturalCandidate>;
+  readonly suggest?: (input: string, limit: number) => ReadonlyArray<string>;
 }> {}
 
 export type LanguageContribution = BaseLanguageContribution | LanguageExtensionContribution;
@@ -116,5 +124,6 @@ export interface CompiledLanguage {
       ) => ReadonlyArray<NaturalCorrectionCandidate>)
     | undefined;
   readonly parseExact: (input: string) => ReadonlyArray<NaturalCandidate>;
+  readonly suggest: (input: string, limit: number) => ReadonlyArray<string>;
   readonly render: (range: DateRangeExprType) => Option.Option<string>;
 }

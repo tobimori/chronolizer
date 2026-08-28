@@ -18,7 +18,7 @@ import {
   LanguageRegistryLayer,
   languagePluginsLayer,
 } from "../src/language/registry.ts";
-import { parseNatural } from "../src/natural/api.ts";
+import { parseNatural, suggestNatural } from "../src/natural/api.ts";
 import { correctWhitespaceSeparatedText } from "../src/natural/correction.ts";
 import { normalizeNaturalText } from "../src/natural/text.ts";
 
@@ -63,6 +63,7 @@ const extensionPlugin = (id: string, priority: number, canonical: string, offset
       const start = startOf(shift(now(), offset, "day"), "day");
       return Option.some(candidate(completePeriod(start, shift(start, 1, "day")), canonical));
     },
+    suggest: (input) => ("special".startsWith(input) ? ["special"] : []),
   });
   return {
     id,
@@ -230,6 +231,24 @@ describe("language registry", () => {
           "priority-z",
           "low",
         ]);
+      },
+      Effect.provide(
+        languagePluginsLayer([
+          extensionPlugin("example/low", 0, "low", 1),
+          extensionPlugin("example/z", 10, "priority-z", 2),
+          EnglishLanguage,
+          extensionPlugin("example/a", 10, "priority-a", 3),
+        ]),
+      ),
+    ),
+  );
+
+  it.effect(
+    "includes extension completions in deterministic plugin order",
+    Effect.fn(
+      function* () {
+        const suggestions = yield* suggestNatural("spec", { locale: "en" });
+        expect(suggestions.map((entry) => entry.text)).toEqual(["priority-a", "priority-z", "low"]);
       },
       Effect.provide(
         languagePluginsLayer([

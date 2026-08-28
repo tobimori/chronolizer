@@ -3,12 +3,51 @@ import { Effect } from "effect";
 
 import { formatFilter } from "../src/filter/codec.ts";
 import { GermanLanguageLayer } from "../src/locales/de.ts";
-import { formatNatural, parseNatural } from "../src/natural/api.ts";
+import { formatNatural, parseNatural, suggestNatural } from "../src/natural/api.ts";
 
 const parseGerman = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "de", typoMode }).pipe(Effect.provide(GermanLanguageLayer));
 
+const suggestGerman = (input: string, limit = 10, allowFuture = true) =>
+  suggestNatural(input, { locale: "de", limit, allowFuture }).pipe(
+    Effect.provide(GermanLanguageLayer),
+  );
+
 describe("German date ranges", () => {
+  it.effect.each([
+    ["seit jah", "seit Jahresbeginn", { gte: "now/y", lte: "now" }],
+    ["jan", "Januar", { gte: "now/y", lt: "now/y+1M" }],
+    ["letzte 3 mon", "letzte 3 Monate", { gte: "now-3M", lte: "now" }],
+    ["seit jan", "seit Januar", { gte: "now/y" }],
+    ["rest des mon", "Rest des Monats", { gte: "now", lt: "now/M+1M" }],
+    ["vor 3 mon", "vor 3 Monaten", { gte: "now-3M/M", lt: "now-3M/M+1M" }],
+    ["bis einschließlich jan", "bis einschließlich Januar", { lt: "now/y+1M" }],
+    ["seit jahresbegnn", "seit Jahresbeginn", { gte: "now/y", lte: "now" }],
+  ] as const)(
+    "suggests German completion for %j",
+    Effect.fn(function* (testCase) {
+      const [input, text, filter] = testCase;
+      const [suggestion] = yield* suggestGerman(input);
+      if (suggestion === undefined) return expect.fail("Expected a suggestion");
+      expect(suggestion.text).toBe(text);
+      expect(formatFilter(suggestion.range)).toEqual(filter);
+    }),
+  );
+
+  it.effect(
+    "completes a partial German year",
+    Effect.fn(function* () {
+      const suggestions = yield* suggestGerman("januar 202", 2);
+      expect(suggestions.map((entry) => entry.text)).toEqual(["Januar 2020", "Januar 2021"]);
+    }),
+  );
+
+  it.effect(
+    "removes positive German completions when future ranges are disabled",
+    Effect.fn(function* () {
+      expect(yield* suggestGerman("nächster m", 10, false)).toEqual([]);
+    }),
+  );
   it.effect.each([
     ["heute", "now/d", "now/d+1d"],
     ["gestern", "now-1d/d", "now-1d/d+1d"],

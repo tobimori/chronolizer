@@ -5,7 +5,7 @@ import type { DateRangeExpr } from "../ast/schemas.ts";
 import { rangeKey } from "../filter/codec.ts";
 import { NaturalLanguageParseError, NaturalLanguageRenderError } from "../language/errors.ts";
 import { LanguageRegistry } from "../language/registry.ts";
-import { NaturalAlternative, NaturalParseResult } from "../language/model.ts";
+import { NaturalAlternative, NaturalParseResult, NaturalSuggestion } from "../language/model.ts";
 import type { Correction, NaturalCandidate } from "../language/model.ts";
 
 export interface ParseNaturalOptions {
@@ -16,6 +16,12 @@ export interface ParseNaturalOptions {
 
 export interface FormatNaturalOptions {
   readonly locale: string;
+}
+
+export interface SuggestNaturalOptions {
+  readonly locale: string;
+  readonly limit?: number;
+  readonly allowFuture?: boolean;
 }
 
 const distinctCandidates = (candidates: EffectArray.NonEmptyReadonlyArray<NaturalCandidate>) =>
@@ -120,6 +126,41 @@ export const parseNatural = Effect.fn("chronolizer.parseNatural")(function* (
   return resultFromCandidates(
     EffectArray.flatMap(best, (entry) => entry.candidates),
     first.correction.corrections,
+  );
+});
+
+const suggestionLimit = (limit: number | undefined) => {
+  if (limit === undefined) return 10;
+  if (!Number.isSafeInteger(limit) || limit <= 0) return 0;
+  return Math.min(limit, 100);
+};
+
+export const suggestNatural = Effect.fn("chronolizer.suggestNatural")(function* (
+  input: string,
+  options: SuggestNaturalOptions,
+) {
+  const registry = yield* LanguageRegistry;
+  const language = yield* registry.resolve(options.locale);
+  const normalized = language.normalize(input, language.locale);
+  const limit = suggestionLimit(options.limit);
+  if (limit === 0) return [];
+  const candidateLimit = Math.min(limit * 2, 200);
+  const suggestions = EffectArray.flatMap(
+    EffectArray.dedupe(language.suggest(normalized, candidateLimit)),
+    (text) =>
+      applyFuturePolicy(
+        language.parseExact(language.normalize(text, language.locale)),
+        options.allowFuture,
+      ).map((candidate) =>
+        NaturalSuggestion.make({ text: candidate.canonical, range: candidate.range }),
+      ),
+  );
+  return EffectArray.take(
+    EffectArray.dedupeWith(
+      suggestions,
+      (left, right) => rangeKey(left.range) === rangeKey(right.range),
+    ),
+    limit,
   );
 });
 
