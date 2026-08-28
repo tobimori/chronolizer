@@ -3,7 +3,7 @@ import { Effect } from "effect";
 
 import { formatFilter } from "../src/filter/codec.ts";
 import { SpanishLanguageLayer } from "../src/locales/es.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/natural/api.ts";
+import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
 
 const parseSpanish = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "es", typoMode }).pipe(Effect.provide(SpanishLanguageLayer));

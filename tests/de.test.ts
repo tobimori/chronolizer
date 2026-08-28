@@ -3,7 +3,7 @@ import { Effect } from "effect";
 
 import { formatFilter } from "../src/filter/codec.ts";
 import { GermanLanguageLayer } from "../src/locales/de.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/natural/api.ts";
+import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
 
 const parseGerman = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "de", typoMode }).pipe(Effect.provide(GermanLanguageLayer));

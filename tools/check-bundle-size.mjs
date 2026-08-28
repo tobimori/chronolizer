@@ -11,9 +11,6 @@ const dist = resolve(argument("--dist") ?? "dist");
 const reportPath = argument("--json");
 const allowMissing = process.argv.includes("--allow-missing");
 const limits = new Map([
-  ["ast.mjs", 8_000],
-  ["parse.mjs", 14_000],
-  ["format.mjs", 8_000],
   ["locales/en.mjs", 24_000],
   ["locales/de.mjs", 28_000],
   ["locales/es.mjs", 28_000],
@@ -22,7 +19,6 @@ const limits = new Map([
   ["locales/tr.mjs", 28_000],
   ["locales/cs.mjs", 30_000],
   ["locales/pl.mjs", 30_000],
-  ["locales/default.mjs", 24_000],
   ["index.mjs", 32_000],
 ]);
 
@@ -43,21 +39,6 @@ const moduleGraph = async (entry, modules = new Map()) => {
 };
 
 const forbiddenPrefixes = new Map([
-  ["ast.mjs", ["registry-", "suggest-", "suggestion-", "format-"]],
-  ["parse.mjs", ["format-"]],
-  ["format.mjs", ["suggest-", "suggestion-"]],
-  [
-    "locales/default.mjs",
-    [
-      "locales/de.mjs",
-      "locales/es.mjs",
-      "locales/fr.mjs",
-      "locales/nl.mjs",
-      "locales/tr.mjs",
-      "locales/cs.mjs",
-      "locales/pl.mjs",
-    ],
-  ],
   [
     "index.mjs",
     [

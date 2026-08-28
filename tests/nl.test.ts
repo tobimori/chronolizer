@@ -3,7 +3,7 @@ import { Effect } from "effect";
 
 import { formatFilter } from "../src/filter/codec.ts";
 import { DutchLanguageLayer } from "../src/locales/nl.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/natural/api.ts";
+import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
 
 const parseDutch = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "nl", typoMode }).pipe(Effect.provide(DutchLanguageLayer));

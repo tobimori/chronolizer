@@ -3,7 +3,7 @@ import { Effect } from "effect";
 
 import { formatFilter } from "../src/filter/codec.ts";
 import { CzechLanguageLayer } from "../src/locales/cs.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/natural/api.ts";
+import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
 
 const parseCzech = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "cs", typoMode }).pipe(Effect.provide(CzechLanguageLayer));

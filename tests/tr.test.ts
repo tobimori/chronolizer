@@ -3,7 +3,7 @@ import { Effect } from "effect";
 
 import { formatFilter } from "../src/filter/codec.ts";
 import { TurkishLanguageLayer } from "../src/locales/tr.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/natural/api.ts";
+import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
 
 const parseTurkish = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "tr", typoMode }).pipe(Effect.provide(TurkishLanguageLayer));

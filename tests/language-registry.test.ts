@@ -3,8 +3,7 @@ import { Effect, Option, Schema } from "effect";
 
 import { now, shift, startOf } from "../src/ast/constructors.ts";
 import { completePeriod, formatFilter } from "../src/filter/codec.ts";
-import { EnglishContribution, EnglishLanguage } from "../src/locales/en.ts";
-import { DefaultLanguageLayer } from "../src/locales/default.ts";
+import { EnglishContribution, EnglishLanguage, EnglishLanguageLayer } from "../src/locales/en.ts";
 import { candidate } from "../src/locales/shared.ts";
 import {
   BaseLanguageContribution,
@@ -19,7 +18,7 @@ import {
   LanguageRegistryLayer,
   languagePluginsLayer,
 } from "../src/language/registry.ts";
-import { parseNatural, suggestNatural } from "../src/natural/api.ts";
+import { parseNatural, suggestNatural } from "../src/index.ts";
 import { correctWhitespaceSeparatedText } from "../src/natural/correction.ts";
 import { normalizeNaturalText } from "../src/natural/text.ts";
 
@@ -131,13 +130,13 @@ const compactPlugin = {
 
 describe("language registry", () => {
   it.effect(
-    "keeps the default language layer English-only",
+    "keeps the English language layer English-only",
     Effect.fn(function* () {
       const registry = yield* LanguageRegistry;
       expect((yield* registry.resolve("en")).locale).toBe("en");
       const error = yield* Effect.flip(registry.resolve("de"));
       expect(error._tag).toBe("UnsupportedLocaleError");
-    }, Effect.provide(DefaultLanguageLayer)),
+    }, Effect.provide(EnglishLanguageLayer)),
   );
 
   it.effect(

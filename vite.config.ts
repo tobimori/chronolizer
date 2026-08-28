@@ -4,9 +4,6 @@ export default defineConfig({
   pack: {
     entry: {
       index: "src/index.ts",
-      ast: "src/entries/ast.ts",
-      format: "src/entries/format.ts",
-      parse: "src/entries/parse.ts",
       "locales/en": "src/locales/en.ts",
       "locales/de": "src/locales/de.ts",
       "locales/es": "src/locales/es.ts",
@@ -15,8 +12,8 @@ export default defineConfig({
       "locales/tr": "src/locales/tr.ts",
       "locales/cs": "src/locales/cs.ts",
       "locales/pl": "src/locales/pl.ts",
-      "locales/default": "src/locales/default.ts",
     },
+    unbundle: true,
     dts: {
       tsgo: true,
     },
@@ -62,6 +59,7 @@ export default defineConfig({
       "anti-slop/no-chained-type-assertions": "error",
       "anti-slop/no-conditional-empty-object-spread": "error",
       "anti-slop/no-explicit-return-types": "error",
+      "anti-slop/no-internal-export-all": "error",
       "anti-slop/no-known-value-widening": "error",
       "anti-slop/no-manual-tags": "error",
       "anti-slop/no-module-mocking": "error",

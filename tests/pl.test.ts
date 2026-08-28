@@ -3,7 +3,7 @@ import { Effect } from "effect";
 
 import { formatFilter } from "../src/filter/codec.ts";
 import { PolishLanguageLayer } from "../src/locales/pl.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/natural/api.ts";
+import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
 
 const parsePolish = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "pl", typoMode }).pipe(Effect.provide(PolishLanguageLayer));

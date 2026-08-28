@@ -3,6 +3,7 @@ import { eslintCompatPlugin } from "@oxlint/plugins";
 import { noChainedTypeAssertionsRule } from "./rules/no-chained-type-assertions.ts";
 import { noConditionalEmptyObjectSpreadRule } from "./rules/no-conditional-empty-object-spread.ts";
 import { noExplicitReturnTypesRule } from "./rules/no-explicit-return-types.ts";
+import { noInternalExportAllRule } from "./rules/no-internal-export-all.ts";
 import { noKnownValueWideningRule } from "./rules/no-known-value-widening.ts";
 import { noManualTagsRule } from "./rules/no-manual-tags.ts";
 import { noModuleMockingRule } from "./rules/no-module-mocking.ts";
@@ -26,6 +27,7 @@ const antiSlopPlugin = eslintCompatPlugin({
 		"no-chained-type-assertions": noChainedTypeAssertionsRule,
 		"no-conditional-empty-object-spread": noConditionalEmptyObjectSpreadRule,
 		"no-explicit-return-types": noExplicitReturnTypesRule,
+		"no-internal-export-all": noInternalExportAllRule,
 		"no-known-value-widening": noKnownValueWideningRule,
 		"no-manual-tags": noManualTagsRule,
 		"no-module-mocking": noModuleMockingRule,

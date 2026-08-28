@@ -13,20 +13,15 @@ This package uses `effect@4.0.0-rc.112`. Its API can change while Effect v4 is i
 Chronolizer is side-effect free and publishes separate ESM entry points:
 
 ```ts
-import { parseFilter, resolve } from "chronolizer/ast";
-import { parseNatural, suggestNatural } from "chronolizer/parse";
-import { formatNatural } from "chronolizer/format";
-import { EnglishLanguageLayer } from "chronolizer/locales/en";
+import { formatNatural, parseFilter, parseNatural, resolve, suggestNatural } from "chronolizer";
+import { GermanLanguageLayer } from "chronolizer/locales/de";
 ```
 
-- `chronolizer/ast` contains the AST, compact filter codec, and resolver.
-- `chronolizer/parse` contains natural-text parsing, autocomplete, and language plugins. It does not load natural rendering.
-- `chronolizer/format` contains AST-to-natural rendering. It does not load parsing or autocomplete.
-- `chronolizer/locales/en`, `chronolizer/locales/de`, `chronolizer/locales/es`, `chronolizer/locales/fr`, `chronolizer/locales/nl`, `chronolizer/locales/tr`, `chronolizer/locales/cs`, `chronolizer/locales/pl`, and `chronolizer/locales/default` expose language packs separately.
-- `chronolizer` and `chronolizer/locales/default` include English only.
+- `chronolizer` is the single main API entry. It also includes the English language pack.
+- `chronolizer/locales/en`, `chronolizer/locales/de`, `chronolizer/locales/es`, `chronolizer/locales/fr`, `chronolizer/locales/nl`, `chronolizer/locales/tr`, `chronolizer/locales/cs`, and `chronolizer/locales/pl` expose language packs separately.
 - Every non-English language must be imported from its own locale subpath.
 
-The package build runs Publint and Are the Types Wrong. CI also checks transitive gzip limits and rejects a parse entry that imports formatting code, a format entry that imports parsing code, or an AST entry that imports either natural-language capability.
+The package declares `sideEffects: false`, so consumer bundlers can remove unused main API exports. The package build runs Publint and Are the Types Wrong. CI checks transitive gzip limits and verifies that the main entry does not load non-English locales.
 
 ## Main concepts
 
@@ -42,7 +37,7 @@ The package build runs Publint and Are the Types Wrong. CI also checks transitiv
 ## Natural language to filter
 
 ```ts
-import { DefaultLanguageLayer, formatFilter, parseNatural } from "chronolizer";
+import { EnglishLanguageLayer, formatFilter, parseNatural } from "chronolizer";
 import { Effect } from "effect";
 
 const run = Effect.fn(function* () {
@@ -52,7 +47,7 @@ const run = Effect.fn(function* () {
   });
 
   return formatFilter(result.range);
-}, Effect.provide(DefaultLanguageLayer));
+}, Effect.provide(EnglishLanguageLayer));
 
 const program = run();
 
@@ -87,13 +82,13 @@ Supported families include named and abbreviated months, named dates, quarters, 
 Use `suggestNatural()` for autocomplete fields. Each Schema-owned suggestion contains canonical display text and the semantic range that it represents:
 
 ```ts
-import { DefaultLanguageLayer, suggestNatural } from "chronolizer";
+import { EnglishLanguageLayer, suggestNatural } from "chronolizer";
 import { Effect } from "effect";
 
 const program = suggestNatural("last m", {
   locale: "en",
   limit: 5,
-}).pipe(Effect.provide(DefaultLanguageLayer));
+}).pipe(Effect.provide(EnglishLanguageLayer));
 
 // [{ text: "last month", range: ... }]
 ```
@@ -211,6 +206,23 @@ Strict mode never runs correction.
 
 `LanguageRegistry` is an Effect service. A language is a scoped plugin contribution. `languagePluginsLayer` validates plugin identifiers, rejects conflicting base languages, applies deterministic extension order, and removes registrations when the Layer scope closes.
 
+Combine all required language plugins in one registry Layer:
+
+```ts
+import { EnglishLanguage, languagePluginsLayer, parseNatural } from "chronolizer";
+import { GermanLanguage } from "chronolizer/locales/de";
+import { PolishLanguage } from "chronolizer/locales/pl";
+import { Effect } from "effect";
+
+const Languages = languagePluginsLayer([EnglishLanguage, GermanLanguage, PolishLanguage]);
+
+const program = parseNatural("letzten Monat", {
+  locale: "de",
+}).pipe(Effect.provide(Languages));
+```
+
+Importing a language plugin does not register it globally. Do not merge individual `*LanguageLayer` values for multi-language use because each one creates a separate registry. Use `languagePluginsLayer([...plugins])` instead.
+
 Language identifiers use canonical BCP 47 base tags. Lookup removes one subtag at a time. For example, `zh-Hant-TW` tries `zh-Hant-TW`, `zh-Hant`, and then `zh`.
 
 Each base language owns:
@@ -235,9 +247,8 @@ Built-in plugins:
 - `TurkishLanguage`
 - `CzechLanguage`
 - `PolishLanguage`
-- `DefaultLanguageLayer` (English only)
 
-Import every non-English language from its locale subpath. This keeps the default bundle small and makes language selection explicit.
+Import every non-English language from its locale subpath. This keeps the main bundle small and makes language selection explicit.
 
 Chinese and Japanese language packs are not included yet.
 

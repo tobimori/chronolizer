@@ -65,6 +65,9 @@ jobs:
       - name: Check bundle size and isolation
         run: node tools/check-bundle-size.mjs --json bundle-head.json
 
+      - name: Check consumer tree shaking
+        run: pnpm check:tree-shaking
+
       - name: Check out pull request base
         if: github.event_name == 'pull_request'
         uses: actions/checkout@v7

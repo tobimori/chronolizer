@@ -3,7 +3,7 @@ import { Effect } from "effect";
 
 import { formatFilter, parseFilter } from "../src/filter/codec.ts";
 import { EnglishLanguageLayer } from "../src/locales/en.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/natural/api.ts";
+import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
 
 const parseEnglish = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "en", typoMode }).pipe(Effect.provide(EnglishLanguageLayer));
