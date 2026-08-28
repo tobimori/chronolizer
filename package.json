@@ -19,17 +19,20 @@
     "dev": "vp pack --watch",
     "test": "vp test",
     "check": "vp check",
-    "prepublishOnly": "vp run build"
+    "prepublishOnly": "vp run build",
+    "prepare": "effect-tsgo patch --typescript --oxlint"
   },
   "dependencies": {
     "effect": "4.0.0-rc.112"
   },
   "devDependencies": {
+    "@effect/tsgo": "0.38.0",
     "@effect/vitest": "4.0.0-rc.112",
     "@oxlint/plugins": "1.80.0",
     "@types/node": "^26.1.1",
     "bumpp": "^11.1.0",
     "oxlint": "1.80.0",
+    "oxlint-tsgolint": "7.0.2001",
     "typescript": "^7.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:"
