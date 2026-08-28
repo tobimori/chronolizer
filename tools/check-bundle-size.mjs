@@ -21,6 +21,7 @@ const limits = new Map([
   ["locales/nl.mjs", 28_000],
   ["locales/tr.mjs", 28_000],
   ["locales/cs.mjs", 30_000],
+  ["locales/pl.mjs", 30_000],
   ["locales/default.mjs", 24_000],
   ["index.mjs", 32_000],
 ]);
@@ -54,6 +55,7 @@ const forbiddenPrefixes = new Map([
       "locales/nl.mjs",
       "locales/tr.mjs",
       "locales/cs.mjs",
+      "locales/pl.mjs",
     ],
   ],
   [
@@ -65,6 +67,7 @@ const forbiddenPrefixes = new Map([
       "locales/nl.mjs",
       "locales/tr.mjs",
       "locales/cs.mjs",
+      "locales/pl.mjs",
     ],
   ],
 ]);

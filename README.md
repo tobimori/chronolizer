@@ -2,7 +2,7 @@
 
 Chronolizer is an Effect v4 library for bidirectional natural-language date ranges.
 
-It converts complete English, German, Spanish, French, Dutch, Turkish, and Czech date-range expressions to a small date-math format. It also renders supported ranges to canonical natural language and resolves the AST with an explicit Effect time zone.
+It converts complete English, German, Spanish, French, Dutch, Turkish, Czech, and Polish date-range expressions to a small date-math format. It also renders supported ranges to canonical natural language and resolves the AST with an explicit Effect time zone.
 
 ## Status
 
@@ -22,7 +22,7 @@ import { EnglishLanguageLayer } from "chronolizer/locales/en";
 - `chronolizer/ast` contains the AST, compact filter codec, and resolver.
 - `chronolizer/parse` contains natural-text parsing, autocomplete, and language plugins. It does not load natural rendering.
 - `chronolizer/format` contains AST-to-natural rendering. It does not load parsing or autocomplete.
-- `chronolizer/locales/en`, `chronolizer/locales/de`, `chronolizer/locales/es`, `chronolizer/locales/fr`, `chronolizer/locales/nl`, `chronolizer/locales/tr`, `chronolizer/locales/cs`, and `chronolizer/locales/default` expose language packs separately.
+- `chronolizer/locales/en`, `chronolizer/locales/de`, `chronolizer/locales/es`, `chronolizer/locales/fr`, `chronolizer/locales/nl`, `chronolizer/locales/tr`, `chronolizer/locales/cs`, `chronolizer/locales/pl`, and `chronolizer/locales/default` expose language packs separately.
 - `chronolizer` and `chronolizer/locales/default` include English only.
 - Every non-English language must be imported from its own locale subpath.
 
@@ -234,6 +234,7 @@ Built-in plugins:
 - `DutchLanguage`
 - `TurkishLanguage`
 - `CzechLanguage`
+- `PolishLanguage`
 - `DefaultLanguageLayer` (English only)
 
 Import every non-English language from its locale subpath. This keeps the default bundle small and makes language selection explicit.

@@ -25,6 +25,7 @@
     "./locales/es": "./dist/locales/es.mjs",
     "./locales/fr": "./dist/locales/fr.mjs",
     "./locales/nl": "./dist/locales/nl.mjs",
+    "./locales/pl": "./dist/locales/pl.mjs",
     "./locales/tr": "./dist/locales/tr.mjs",
     "./parse": "./dist/parse.mjs",
     "./package.json": "./package.json"
