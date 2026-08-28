@@ -55,6 +55,7 @@ export default defineConfig({
       "anti-slop/no-widen-then-assert": "error",
       "anti-slop/require-safety-comment-for-type-assertion": "error",
       "anti-slop-effect/no-service-constructor-imports": "error",
+      "anti-slop-effect/prefer-effect-fn": "error",
     },
   },
   fmt: {

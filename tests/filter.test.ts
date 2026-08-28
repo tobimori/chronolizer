@@ -48,8 +48,9 @@ describe("filter expressions", () => {
     expect(formatInstantExpression(normalizeInstant(expression))).toBe("now+2M");
   });
 
-  it.effect("provides a bidirectional Effect Schema expression codec", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "provides a bidirectional Effect Schema expression codec",
+    Effect.fn(function* () {
       const expression = yield* Schema.decodeEffect(InstantExpressionFromString)("now-1y/y");
       const encoded = yield* Schema.encodeEffect(InstantExpressionFromString)(expression);
       expect(encoded).toBe("now-1y/y");
@@ -82,8 +83,9 @@ describe("filter expressions", () => {
 });
 
 describe("date filters", () => {
-  it.effect("round-trips all bound relation combinations", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "round-trips all bound relation combinations",
+    Effect.fn(function* () {
       const filters = [
         { gt: "now-1d", lt: "now" },
         { gt: "now-1d", lte: "now" },
@@ -113,8 +115,9 @@ describe("date filters", () => {
     }
   });
 
-  it.effect("decodes an external filter through one Effect Schema codec", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "decodes an external filter through one Effect Schema codec",
+    Effect.fn(function* () {
       const range = yield* Schema.decodeEffect(DateRangeFromFilter)({
         gte: "now/y",
         lte: "now",
@@ -124,16 +127,18 @@ describe("date filters", () => {
     }),
   );
 
-  it.effect("round-trips a relative bounded range", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "round-trips a relative bounded range",
+    Effect.fn(function* () {
       const filter = { gte: "now-1y/y", lt: "now-1y/y+1M" };
       const range = yield* parseFilter(filter);
       expect(formatFilter(range)).toEqual(filter);
     }),
   );
 
-  it.effect("preserves an open lower range", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "preserves an open lower range",
+    Effect.fn(function* () {
       const range = yield* parseFilter({ gte: "2025-01-01" });
       expect(formatFilter(range)).toEqual({ gte: "2025-01-01" });
     }),
@@ -152,8 +157,9 @@ describe("date filters", () => {
     expect(isDateFilter({ lt: "now" })).toBe(true);
   });
 
-  it.effect("reports malformed external filters through the Schema codec", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "reports malformed external filters through the Schema codec",
+    Effect.fn(function* () {
       const empty = yield* Effect.flip(Schema.decodeEffect(DateRangeFromFilter)({}));
       const malformed = yield* Effect.flip(
         Schema.decodeEffect(DateRangeFromFilter)({ gte: "now+0d" }),

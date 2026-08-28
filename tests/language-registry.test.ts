@@ -73,32 +73,42 @@ const regionalPlugin = {
 } satisfies LanguagePlugin;
 
 describe("language registry", () => {
-  it.effect("uses BCP 47 language fallback for a regional locale", () =>
-    Effect.gen(function* () {
-      const registry = yield* LanguageRegistry;
-      const language = yield* registry.resolve("en-US");
-      expect(language.locale).toBe("en");
-    }).pipe(Effect.provide(languagePluginsLayer([EnglishLanguage]))),
+  it.effect(
+    "uses BCP 47 language fallback for a regional locale",
+    Effect.fn(
+      function* () {
+        const registry = yield* LanguageRegistry;
+        const language = yield* registry.resolve("en-US");
+        expect(language.locale).toBe("en");
+      },
+      Effect.provide(languagePluginsLayer([EnglishLanguage])),
+    ),
   );
 
-  it.effect("prefers an exact regional base over language fallback", () =>
-    Effect.gen(function* () {
-      const registry = yield* LanguageRegistry;
-      const language = yield* registry.resolve("en-US");
-      expect(language.locale).toBe("en-US");
-    }).pipe(Effect.provide(languagePluginsLayer([EnglishLanguage, regionalPlugin]))),
+  it.effect(
+    "prefers an exact regional base over language fallback",
+    Effect.fn(
+      function* () {
+        const registry = yield* LanguageRegistry;
+        const language = yield* registry.resolve("en-US");
+        expect(language.locale).toBe("en-US");
+      },
+      Effect.provide(languagePluginsLayer([EnglishLanguage, regionalPlugin])),
+    ),
   );
 
-  it.effect("orders extensions by priority and then plugin identifier", () =>
-    Effect.gen(function* () {
-      const registry = yield* LanguageRegistry;
-      const language = yield* registry.resolve("en-US");
-      expect(language.parseExact("special").map((entry) => entry.canonical)).toEqual([
-        "priority-a",
-        "priority-z",
-        "low",
-      ]);
-    }).pipe(
+  it.effect(
+    "orders extensions by priority and then plugin identifier",
+    Effect.fn(
+      function* () {
+        const registry = yield* LanguageRegistry;
+        const language = yield* registry.resolve("en-US");
+        expect(language.parseExact("special").map((entry) => entry.canonical)).toEqual([
+          "priority-a",
+          "priority-z",
+          "low",
+        ]);
+      },
       Effect.provide(
         languagePluginsLayer([
           extensionPlugin("example/low", 0, "low", 1),
@@ -110,8 +120,9 @@ describe("language registry", () => {
     ),
   );
 
-  it.effect("rejects duplicate plugin identifiers before registration", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "rejects duplicate plugin identifiers before registration",
+    Effect.fn(function* () {
       const error = yield* Effect.flip(
         Effect.provide(Effect.void, languagePluginsLayer([EnglishLanguage, EnglishLanguage])),
       );
@@ -119,8 +130,9 @@ describe("language registry", () => {
     }),
   );
 
-  it.effect("rejects conflicting base languages", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "rejects conflicting base languages",
+    Effect.fn(function* () {
       const error = yield* Effect.flip(
         Effect.provide(Effect.void, languagePluginsLayer([EnglishLanguage, alternatePlugin])),
       );
@@ -128,8 +140,9 @@ describe("language registry", () => {
     }),
   );
 
-  it.effect("atomically accepts one of two concurrent base registrations", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "atomically accepts one of two concurrent base registrations",
+    Effect.fn(function* () {
       const registry = yield* LanguageRegistry;
       const results = yield* Effect.scoped(
         Effect.all(
@@ -142,41 +155,44 @@ describe("language registry", () => {
       );
       expect(results.filter((result) => result._tag === "Success")).toHaveLength(1);
       expect(results.filter((result) => result._tag === "Failure")).toHaveLength(1);
-    }).pipe(Effect.provide(LanguageRegistryLayer)),
+    }, Effect.provide(LanguageRegistryLayer)),
   );
 
-  it.effect("removes a registration when its Scope closes", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "removes a registration when its Scope closes",
+    Effect.fn(function* () {
       const registry = yield* LanguageRegistry;
       yield* Effect.scoped(registry.register("chronolizer/language-en", EnglishContribution));
       const error = yield* Effect.flip(registry.resolve("en"));
       expect(error._tag).toBe("UnsupportedLocaleError");
-    }).pipe(Effect.provide(LanguageRegistryLayer)),
+    }, Effect.provide(LanguageRegistryLayer)),
   );
 
-  it.effect("reports an equal-cost typo tie as ambiguous", () =>
-    Effect.gen(function* () {
-      const result = yield* parseNatural("boke", {
-        locale: "xx",
-        typoMode: "tolerant",
-      });
-      expect(result.quality).toBe("ambiguous");
-      expect(result.alternatives).toHaveLength(1);
-    }).pipe(Effect.provide(languagePluginsLayer([ambiguousPlugin]))),
+  it.effect(
+    "reports an equal-cost typo tie as ambiguous",
+    Effect.fn(
+      function* () {
+        const result = yield* parseNatural("boke", {
+          locale: "xx",
+          typoMode: "tolerant",
+        });
+        expect(result.quality).toBe("ambiguous");
+        expect(result.alternatives).toHaveLength(1);
+      },
+      Effect.provide(languagePluginsLayer([ambiguousPlugin])),
+    ),
   );
 
-  it.effect("keeps a compiled snapshot usable after registration cleanup", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "keeps a compiled snapshot usable after registration cleanup",
+    Effect.fn(function* () {
       const registry = yield* LanguageRegistry;
-      const snapshot = yield* Effect.scoped(
-        Effect.gen(function* () {
-          yield* registry.register("chronolizer/language-en", EnglishContribution);
-          return yield* registry.resolve("en");
-        }),
-      );
+      const snapshot = yield* registry
+        .register("chronolizer/language-en", EnglishContribution)
+        .pipe(Effect.andThen(registry.resolve("en")), Effect.scoped);
       const candidates = snapshot.parseExact("year to date");
       expect(candidates).toHaveLength(1);
       expect(snapshot.render(completePeriod(now(), now()))).toEqual(Option.none());
-    }).pipe(Effect.provide(LanguageRegistryLayer)),
+    }, Effect.provide(LanguageRegistryLayer)),
   );
 });
