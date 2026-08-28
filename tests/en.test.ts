@@ -9,8 +9,9 @@ const parseEnglish = (input: string, typoMode: "strict" | "tolerant" = "strict")
   parseNatural(input, { locale: "en", typoMode }).pipe(Effect.provide(EnglishLanguageLayer));
 
 describe("English date ranges", () => {
-  it.effect("covers every relative calendar period", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "covers every relative calendar period",
+    Effect.fn(function* () {
       const cases = [
         ["today", "now/d", "now/d+1d"],
         ["yesterday", "now-1d/d", "now-1d/d+1d"],
@@ -35,8 +36,9 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("covers every period-to-date unit", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "covers every period-to-date unit",
+    Effect.fn(function* () {
       const cases = [
         ["day to date", "now/d"],
         ["week to date", "now/w"],
@@ -51,8 +53,37 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("maps every English month and the December year boundary", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "treats English counted-month variants as the same trailing range",
+    Effect.fn(function* () {
+      for (const input of ["last 3 months", "previous 3 months", "3 months"]) {
+        const result = yield* parseEnglish(input);
+        expect(formatFilter(result.range), input).toEqual({ gte: "now-3M", lte: "now" });
+        expect(yield* formatNatural(result.range, { locale: "en" })).toBe("last 3 months");
+      }
+    }, Effect.provide(EnglishLanguageLayer)),
+  );
+
+  it.effect(
+    "maps every English counted trailing unit",
+    Effect.fn(function* () {
+      const cases = [
+        ["last 2 days", "now-2d"],
+        ["last 2 weeks", "now-2w"],
+        ["last 2 months", "now-2M"],
+        ["last 2 quarters", "now-2q"],
+        ["last 2 years", "now-2y"],
+      ] as const;
+      for (const [input, gte] of cases) {
+        const result = yield* parseEnglish(input);
+        expect(formatFilter(result.range), input).toEqual({ gte, lte: "now" });
+      }
+    }),
+  );
+
+  it.effect(
+    "maps every English month and the December year boundary",
+    Effect.fn(function* () {
       const months = [
         "January",
         "February",
@@ -80,16 +111,18 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("parses year to date as an inclusive current endpoint", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "parses year to date as an inclusive current endpoint",
+    Effect.fn(function* () {
       const result = yield* parseEnglish("year to date");
       expect(formatFilter(result.range)).toEqual({ gte: "now/y", lte: "now" });
       expect(result.quality).toBe("exact");
     }),
   );
 
-  it.effect("parses a fixed month as a half-open calendar period", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "parses a fixed month as a half-open calendar period",
+    Effect.fn(function* () {
       const result = yield* parseEnglish("January 2025");
       expect(formatFilter(result.range)).toEqual({
         gte: "2025-01-01",
@@ -98,8 +131,9 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("uses leap-year month and day boundaries", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "uses leap-year month and day boundaries",
+    Effect.fn(function* () {
       const month = yield* parseEnglish("February 2024");
       const day = yield* parseEnglish("2024-02-29");
       expect(formatFilter(month.range)).toEqual({
@@ -113,8 +147,9 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("keeps named months relative to the selected year", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "keeps named months relative to the selected year",
+    Effect.fn(function* () {
       const cases = [
         ["January of last year", "now-1y/y", "now-1y/y+1M"],
         ["June of this year", "now/y+5M", "now/y+6M"],
@@ -127,8 +162,9 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("supports each open-boundary meaning", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "supports each open-boundary meaning",
+    Effect.fn(function* () {
       const since = yield* parseEnglish("since January 2025");
       const before = yield* parseEnglish("before January 2025");
       const through = yield* parseEnglish("through January 2025");
@@ -140,8 +176,9 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("uses and renders both full periods in a from-to range", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "uses and renders both full periods in a from-to range",
+    Effect.fn(function* () {
       const result = yield* parseEnglish("from February 2024 to March 2024");
       expect(formatFilter(result.range)).toEqual({
         gte: "2024-02-01",
@@ -160,8 +197,9 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("renders parsed ranges to canonical English", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "renders parsed ranges to canonical English",
+    Effect.fn(function* () {
       const complete = yield* parseEnglish("JANUARY   2025");
       const open = yield* parseEnglish("since January 2025");
       const renderedComplete = yield* formatNatural(complete.range, {
@@ -175,8 +213,9 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("corrects bounded lexical typos only in tolerant mode", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "corrects bounded lexical typos only in tolerant mode",
+    Effect.fn(function* () {
       const result = yield* parseEnglish("januray of last yaer", "tolerant");
       expect(result.quality).toBe("corrected");
       expect(result.corrections).toMatchObject([
@@ -190,15 +229,17 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("does not run typo correction in strict mode", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "does not run typo correction in strict mode",
+    Effect.fn(function* () {
       const error = yield* Effect.flip(parseEnglish("januray 2025"));
       expect(error._tag).toBe("NaturalLanguageParseError");
     }),
   );
 
-  it.effect("never corrects years or short ambiguous month words", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "never corrects years or short ambiguous month words",
+    Effect.fn(function* () {
       const badYear = yield* Effect.flip(parseEnglish("January 202", "tolerant"));
       const badDate = yield* Effect.flip(parseEnglish("2025-02-29", "tolerant"));
       const shortMonth = yield* Effect.flip(parseEnglish("mey 2025", "tolerant"));
@@ -208,8 +249,9 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("normalizes Unicode width, case, and whitespace", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "normalizes Unicode width, case, and whitespace",
+    Effect.fn(function* () {
       const result = yield* parseEnglish("  ＪＡＮＵＡＲＹ　２０２５  ");
       expect(formatFilter(result.range)).toEqual({
         gte: "2025-01-01",
@@ -218,8 +260,9 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("rejects impossible, incomplete, and out-of-scope input", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "rejects impossible, incomplete, and out-of-scope input",
+    Effect.fn(function* () {
       const inputs = [
         "",
         "2025-02-29",
@@ -229,6 +272,9 @@ describe("English date ranges", () => {
         "January 2025 extra",
         "Jan 2025",
         "past month",
+        "0 months",
+        "1 months",
+        "2 month",
         "show results since January 2025",
       ];
       for (const input of inputs) {
@@ -238,8 +284,9 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("fails to render a range with no supported natural form", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "fails to render a range with no supported natural form",
+    Effect.fn(function* () {
       const range = yield* parseFilter({ gte: "now+2d", lt: "now+3d" });
       const error = yield* Effect.flip(
         formatNatural(range, { locale: "en" }).pipe(Effect.provide(EnglishLanguageLayer)),
@@ -248,8 +295,9 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("round-trips canonical relative and fixed periods", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "round-trips canonical relative and fixed periods",
+    Effect.fn(function* () {
       const phrases = [
         "today",
         "last week",

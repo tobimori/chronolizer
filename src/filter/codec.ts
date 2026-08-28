@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Match } from "effect";
 
 import {
   boundedRange,
@@ -35,54 +35,54 @@ const parseUpper = (filter: DateFilter) => {
   return Effect.void;
 };
 
-export const parseFilter = (filter: DateFilter) =>
-  Effect.gen(function* () {
-    const lower = yield* parseLower(filter);
-    const upper = yield* parseUpper(filter);
-    if (lower !== undefined && upper !== undefined) {
-      return normalizeRange(boundedRange(lower, upper));
-    }
-    if (lower !== undefined) {
-      return normalizeRange(lowerOpenRange(lower));
-    }
-    if (upper !== undefined) {
-      return normalizeRange(upperOpenRange(upper));
-    }
-    return yield* new InvalidDateFilterError({
-      message: "A date filter must contain at least one bound",
-    });
+export const parseFilter = Effect.fn("chronolizer.parseFilter")(function* (filter: DateFilter) {
+  const lower = yield* parseLower(filter);
+  const upper = yield* parseUpper(filter);
+  if (lower !== undefined && upper !== undefined) {
+    return normalizeRange(boundedRange(lower, upper));
+  }
+  if (lower !== undefined) {
+    return normalizeRange(lowerOpenRange(lower));
+  }
+  if (upper !== undefined) {
+    return normalizeRange(upperOpenRange(upper));
+  }
+  return yield* new InvalidDateFilterError({
+    message: "A date filter must contain at least one bound",
   });
+});
 
-const formatLower = (bound: LowerBound) => {
-  const value = formatInstantExpression(bound.value);
-  return bound._tag === "GreaterThan"
-    ? DateFilter.make({ gt: value })
-    : DateFilter.make({ gte: value });
-};
+const formatLower = Match.typeTags<LowerBound>()({
+  GreaterThan: (bound) => DateFilter.make({ gt: formatInstantExpression(bound.value) }),
+  GreaterThanOrEqual: (bound) =>
+    DateFilter.make({
+      gte: formatInstantExpression(bound.value),
+    }),
+});
 
-const formatUpper = (bound: UpperBound) => {
-  const value = formatInstantExpression(bound.value);
-  return bound._tag === "LessThan"
-    ? DateFilter.make({ lt: value })
-    : DateFilter.make({ lte: value });
-};
+const formatUpper = Match.typeTags<UpperBound>()({
+  LessThan: (bound) => DateFilter.make({ lt: formatInstantExpression(bound.value) }),
+  LessThanOrEqual: (bound) =>
+    DateFilter.make({
+      lte: formatInstantExpression(bound.value),
+    }),
+});
 
 export const formatFilter = (range: DateRangeExpr) => {
   const normalized = normalizeRange(range);
   if (normalized.lower !== undefined && normalized.upper !== undefined) {
-    const lower = formatLower(normalized.lower);
-    const upper = formatUpper(normalized.upper);
-    if ("gt" in lower) {
-      return "lt" in upper
-        ? DateFilter.make({ gt: lower.gt, lt: upper.lt })
-        : DateFilter.make({ gt: lower.gt, lte: upper.lte });
-    }
-    return "lt" in upper
-      ? DateFilter.make({ gte: lower.gte, lt: upper.lt })
-      : DateFilter.make({ gte: lower.gte, lte: upper.lte });
+    return DateFilter.make({
+      ...formatLower(normalized.lower),
+      ...formatUpper(normalized.upper),
+    });
   }
   if (normalized.lower !== undefined) return formatLower(normalized.lower);
   return formatUpper(normalized.upper);
+};
+
+export const rangeKey = (range: DateRangeExpr) => {
+  const filter = formatFilter(range);
+  return `${filter.gt ?? ""}|${filter.gte ?? ""}|${filter.lt ?? ""}|${filter.lte ?? ""}`;
 };
 
 export const completePeriod = (start: InstantExpr, end: InstantExpr) =>

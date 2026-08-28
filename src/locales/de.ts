@@ -9,20 +9,23 @@ import {
 } from "../ast/constructors.ts";
 import { isIsoDate } from "../ast/schemas.ts";
 import type { DateRangeExpr, Unit } from "../ast/schemas.ts";
-import { formatFilter } from "../filter/codec.ts";
 import { BaseLanguageContribution } from "../language/model.ts";
 import { defineLanguagePlugin, languagePluginsLayer } from "../language/registry.ts";
 import {
   candidate,
+  expressionDates,
   fixedDatePeriod,
   fixedMonthPeriod,
   fixedYearPeriod,
   monthOfRelativeYear,
+  parseTrailingCount,
   periodRange,
   periodToDateRange,
   previousDay,
   relativePeriod,
   renderFromPhrases,
+  trailingPeriod,
+  trailingRange,
 } from "./shared.ts";
 import type { Period } from "./shared.ts";
 
@@ -44,6 +47,7 @@ const months = [
 interface UnitPhrases {
   readonly unit: Unit;
   readonly noun: string;
+  readonly plural: string;
   readonly current: string;
   readonly previous: string;
   readonly next: string;
@@ -54,6 +58,7 @@ const unitPhrases: ReadonlyArray<UnitPhrases> = [
   {
     unit: "day",
     noun: "tag",
+    plural: "tage",
     current: "heute",
     previous: "gestern",
     next: "morgen",
@@ -62,6 +67,7 @@ const unitPhrases: ReadonlyArray<UnitPhrases> = [
   {
     unit: "week",
     noun: "woche",
+    plural: "wochen",
     current: "diese woche",
     previous: "letzte woche",
     next: "nächste woche",
@@ -70,6 +76,7 @@ const unitPhrases: ReadonlyArray<UnitPhrases> = [
   {
     unit: "month",
     noun: "monat",
+    plural: "monate",
     current: "dieser monat",
     previous: "letzter monat",
     next: "nächster monat",
@@ -78,6 +85,7 @@ const unitPhrases: ReadonlyArray<UnitPhrases> = [
   {
     unit: "quarter",
     noun: "quartal",
+    plural: "quartale",
     current: "dieses quartal",
     previous: "letztes quartal",
     next: "nächstes quartal",
@@ -86,6 +94,7 @@ const unitPhrases: ReadonlyArray<UnitPhrases> = [
   {
     unit: "year",
     noun: "jahr",
+    plural: "jahre",
     current: "dieses jahr",
     previous: "letztes jahr",
     next: "nächstes jahr",
@@ -199,7 +208,36 @@ const boundaryCandidate = (input: string) => {
   }
 };
 
+const parseTrailingPeriod = (input: string) => {
+  const match = EffectString.match(
+    /^(?:(?:die letzten|letzten|letzte) )?([1-9]\d*) (tag|tage|woche|wochen|monat|monate|quartal|quartale|jahr|jahre)$/u,
+  )(input);
+  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  const amount = parseTrailingCount(match.value[1]);
+  const entry = unitPhrases.find(
+    (unit) => unit.noun === match.value[2] || unit.plural === match.value[2],
+  );
+  if (
+    Option.isNone(amount) ||
+    entry === undefined ||
+    (amount.value === 1 ? match.value[2] !== entry.noun : match.value[2] !== entry.plural)
+  ) {
+    return Option.none<ReturnType<typeof candidate>>();
+  }
+  return Option.some(
+    candidate(
+      trailingRange(amount.value, entry.unit),
+      amount.value === 1
+        ? `1 ${title(entry.noun)}`
+        : `letzte ${amount.value} ${title(entry.plural)}`,
+    ),
+  );
+};
+
 const parseGerman = (input: string) => {
+  const trailing = parseTrailingPeriod(input);
+  if (Option.isSome(trailing)) return trailing;
+
   const toDate = unitPhrases.find((entry) => entry.toDate === input);
   if (toDate !== undefined) {
     return Option.some(candidate(periodToDateRange(toDate.unit), input));
@@ -229,19 +267,19 @@ const parseGerman = (input: string) => {
   );
 };
 
-const expressionDates = (range: DateRangeExpr) => {
-  const filter = formatFilter(range);
-  const expressions = [filter.gt, filter.gte, filter.lt, filter.lte];
-  const dates = new Set<string>();
-  for (const expression of expressions) {
-    if (expression === undefined) continue;
-    const match = EffectString.match(/^(\d{4})-(\d{2})-(\d{2})/u)(expression);
-    if (Option.isSome(match)) dates.add(match.value[0]);
-  }
-  return [...dates];
-};
-
 const renderGerman = (range: DateRangeExpr) => {
+  const trailing = trailingPeriod(range);
+  if (Option.isSome(trailing)) {
+    const entry = unitPhrases.find((unit) => unit.unit === trailing.value.unit);
+    if (entry !== undefined) {
+      return Option.some(
+        trailing.value.amount === 1
+          ? `1 ${title(entry.noun)}`
+          : `letzte ${trailing.value.amount} ${title(entry.plural)}`,
+      );
+    }
+  }
+
   const periods = [
     ...unitPhrases.flatMap((entry) => [entry.current, entry.previous, entry.next]),
     ...months.flatMap((month) => [month, `${month} letzten jahres`, `${month} nächsten jahres`]),
@@ -279,14 +317,17 @@ export const GermanContribution = new BaseLanguageContribution({
     ...months,
     ...unitPhrases.flatMap((entry) => [
       entry.noun,
+      entry.plural,
       ...entry.current.split(" "),
       ...entry.previous.split(" "),
       ...entry.next.split(" "),
     ]),
     "bis",
+    "die",
     "dieses",
     "einschließlich",
     "jahres",
+    "letzte",
     "letzten",
     "nach",
     "nächsten",

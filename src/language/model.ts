@@ -30,10 +30,11 @@ export const NaturalParseResult = Schema.Struct({
 });
 export type NaturalParseResult = typeof NaturalParseResult.Type;
 
-export interface NaturalCandidate {
-  readonly range: DateRangeExprType;
-  readonly canonical: string;
-}
+export const NaturalCandidate = Schema.Struct({
+  range: DateRangeExpr,
+  canonical: Schema.String,
+});
+export type NaturalCandidate = typeof NaturalCandidate.Type;
 
 export class BaseLanguageContribution extends Data.TaggedClass("BaseLanguage")<{
   readonly locale: string;

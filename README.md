@@ -25,14 +25,16 @@ This package uses `effect@4.0.0-rc.112`. Its API can change while Effect v4 is i
 import { DefaultLanguageLayer, formatFilter, parseNatural } from "chronolizer";
 import { Effect } from "effect";
 
-const program = Effect.gen(function* () {
+const run = Effect.fn(function* () {
   const result = yield* parseNatural("January of last year", {
     locale: "en",
     typoMode: "strict",
   });
 
   return formatFilter(result.range);
-}).pipe(Effect.provide(DefaultLanguageLayer));
+}, Effect.provide(DefaultLanguageLayer));
+
+const program = run();
 
 // { gte: "now-1y/y", lt: "now-1y/y+1M" }
 ```
@@ -45,7 +47,9 @@ January 2025                    -> { gte: "2025-01-01", lt: "2025-02-01" }
 since January 2025              -> { gte: "2025-01-01" }
 before January 2025             -> { lt: "2025-01-01" }
 through January 2025            -> { lt: "2025-02-01" }
+last 3 months                   -> { gte: "now-3M", lte: "now" }
 Januar letzten Jahres           -> { gte: "now-1y/y", lt: "now-1y/y+1M" }
+die letzten 3 Monate            -> { gte: "now-3M", lte: "now" }
 seit Januar 2025                -> { gte: "2025-01-01" }
 ```
 
@@ -57,14 +61,16 @@ Chronolizer parses the complete input. It does not extract a date phrase from a 
 import { DefaultLanguageLayer, formatNatural, parseFilter } from "chronolizer";
 import { Effect } from "effect";
 
-const program = Effect.gen(function* () {
+const run = Effect.fn(function* () {
   const range = yield* parseFilter({
     gte: "2025-01-01",
     lt: "2025-02-01",
   });
 
   return yield* formatNatural(range, { locale: "de" });
-}).pipe(Effect.provide(DefaultLanguageLayer));
+}, Effect.provide(DefaultLanguageLayer));
+
+const program = run();
 
 // "Januar 2025"
 ```
@@ -113,10 +119,12 @@ Operations run from left to right. `/unit` floors to the start of the calendar u
 import { parseFilter, resolve } from "chronolizer";
 import { DateTime, Effect } from "effect";
 
-const program = Effect.gen(function* () {
+const run = Effect.fn(function* () {
   const range = yield* parseFilter({ gte: "now/y", lte: "now" });
   return yield* resolve(range);
-}).pipe(DateTime.withCurrentZoneNamed("Europe/Berlin"));
+}, DateTime.withCurrentZoneNamed("Europe/Berlin"));
+
+const program = run();
 ```
 
 The resolver uses Effect Clock and `DateTime.CurrentTimeZone`. It never uses the host local time zone without an explicit caller decision. Named zones use the runtime ICU time-zone data.
@@ -124,12 +132,10 @@ The resolver uses Effect Clock and `DateTime.CurrentTimeZone`. It never uses the
 ## Tolerant parsing
 
 ```ts
-const result =
-  yield *
-  parseNatural("januray of last yaer", {
-    locale: "en",
-    typoMode: "tolerant",
-  });
+const program = parseNatural("januray of last yaer", {
+  locale: "en",
+  typoMode: "tolerant",
+});
 ```
 
 The result reports:

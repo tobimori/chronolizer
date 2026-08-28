@@ -9,20 +9,23 @@ import {
 } from "../ast/constructors.ts";
 import { isIsoDate } from "../ast/schemas.ts";
 import type { DateRangeExpr, Unit } from "../ast/schemas.ts";
-import { formatFilter } from "../filter/codec.ts";
 import { BaseLanguageContribution } from "../language/model.ts";
 import { defineLanguagePlugin, languagePluginsLayer } from "../language/registry.ts";
 import {
   candidate,
+  expressionDates,
   fixedDatePeriod,
   fixedMonthPeriod,
   fixedYearPeriod,
   monthOfRelativeYear,
+  parseTrailingCount,
   periodRange,
   periodToDateRange,
   previousDay,
   relativePeriod,
   renderFromPhrases,
+  trailingPeriod,
+  trailingRange,
 } from "./shared.ts";
 import type { Period } from "./shared.ts";
 
@@ -42,12 +45,12 @@ const months = [
 ] as const;
 
 const units = [
-  ["day", "day"],
-  ["week", "week"],
-  ["month", "month"],
-  ["quarter", "quarter"],
-  ["year", "year"],
-] as const satisfies ReadonlyArray<readonly [string, Unit]>;
+  ["day", "day", "days"],
+  ["week", "week", "weeks"],
+  ["month", "month", "months"],
+  ["quarter", "quarter", "quarters"],
+  ["year", "year", "years"],
+] as const satisfies ReadonlyArray<readonly [string, Unit, string]>;
 
 const title = (value: string) => `${value.slice(0, 1).toLocaleUpperCase("en")}${value.slice(1)}`;
 
@@ -161,7 +164,32 @@ const boundaryCandidate = (input: string) => {
   }
 };
 
+const parseTrailingPeriod = (input: string) => {
+  const match = EffectString.match(
+    /^(?:(?:last|previous) )?([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years)$/u,
+  )(input);
+  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  const amount = parseTrailingCount(match.value[1]);
+  const entry = units.find((unit) => unit[0] === match.value[2] || unit[2] === match.value[2]);
+  if (
+    Option.isNone(amount) ||
+    entry === undefined ||
+    (amount.value === 1 ? match.value[2] !== entry[0] : match.value[2] !== entry[2])
+  ) {
+    return Option.none<ReturnType<typeof candidate>>();
+  }
+  return Option.some(
+    candidate(
+      trailingRange(amount.value, entry[1]),
+      amount.value === 1 ? `1 ${entry[0]}` : `last ${amount.value} ${entry[2]}`,
+    ),
+  );
+};
+
 const parseEnglish = (input: string) => {
+  const trailing = parseTrailingPeriod(input);
+  if (Option.isSome(trailing)) return trailing;
+
   const toDate = units.find((entry) => `${entry[0]} to date` === input);
   if (toDate !== undefined) {
     return Option.some(candidate(periodToDateRange(toDate[1]), input));
@@ -191,19 +219,17 @@ const parseEnglish = (input: string) => {
   );
 };
 
-const expressionDates = (range: DateRangeExpr) => {
-  const filter = formatFilter(range);
-  const expressions = [filter.gt, filter.gte, filter.lt, filter.lte];
-  const dates = new Set<string>();
-  for (const expression of expressions) {
-    if (expression === undefined) continue;
-    const match = EffectString.match(/^(\d{4})-(\d{2})-(\d{2})/u)(expression);
-    if (Option.isSome(match)) dates.add(match.value[0]);
-  }
-  return [...dates];
-};
-
 const renderEnglish = (range: DateRangeExpr) => {
+  const trailing = trailingPeriod(range);
+  if (Option.isSome(trailing)) {
+    const entry = units.find((unit) => unit[1] === trailing.value.unit);
+    if (entry !== undefined) {
+      return Option.some(
+        trailing.value.amount === 1 ? `1 ${entry[0]}` : `last ${trailing.value.amount} ${entry[2]}`,
+      );
+    }
+  }
+
   const periods = [
     "today",
     "yesterday",
@@ -242,7 +268,7 @@ export const EnglishContribution = new BaseLanguageContribution({
   locale: "en",
   vocabulary: [
     ...months,
-    ...units.map((entry) => entry[0]),
+    ...units.flatMap((entry) => [entry[0], entry[2]]),
     "after",
     "before",
     "date",
@@ -250,6 +276,7 @@ export const EnglishContribution = new BaseLanguageContribution({
     "last",
     "next",
     "of",
+    "previous",
     "since",
     "this",
     "through",

@@ -9,8 +9,9 @@ const parseGerman = (input: string, typoMode: "strict" | "tolerant" = "strict") 
   parseNatural(input, { locale: "de", typoMode }).pipe(Effect.provide(GermanLanguageLayer));
 
 describe("German date ranges", () => {
-  it.effect("covers every German relative calendar period", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "covers every German relative calendar period",
+    Effect.fn(function* () {
       const cases = [
         ["heute", "now/d", "now/d+1d"],
         ["gestern", "now-1d/d", "now-1d/d+1d"],
@@ -35,8 +36,9 @@ describe("German date ranges", () => {
     }),
   );
 
-  it.effect("covers every German period-to-date unit", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "covers every German period-to-date unit",
+    Effect.fn(function* () {
       const cases = [
         ["Tag bis heute", "now/d"],
         ["Woche bis heute", "now/w"],
@@ -51,8 +53,42 @@ describe("German date ranges", () => {
     }),
   );
 
-  it.effect("maps every German month and the December year boundary", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "treats German counted-month variants as the same trailing range",
+    Effect.fn(function* () {
+      for (const input of [
+        "die letzten 3 Monate",
+        "letzten 3 Monate",
+        "letzte 3 Monate",
+        "3 Monate",
+      ]) {
+        const result = yield* parseGerman(input);
+        expect(formatFilter(result.range), input).toEqual({ gte: "now-3M", lte: "now" });
+        expect(yield* formatNatural(result.range, { locale: "de" })).toBe("letzte 3 Monate");
+      }
+    }, Effect.provide(GermanLanguageLayer)),
+  );
+
+  it.effect(
+    "maps every German counted trailing unit",
+    Effect.fn(function* () {
+      const cases = [
+        ["letzte 2 Tage", "now-2d"],
+        ["letzte 2 Wochen", "now-2w"],
+        ["letzte 2 Monate", "now-2M"],
+        ["letzte 2 Quartale", "now-2q"],
+        ["letzte 2 Jahre", "now-2y"],
+      ] as const;
+      for (const [input, gte] of cases) {
+        const result = yield* parseGerman(input);
+        expect(formatFilter(result.range), input).toEqual({ gte, lte: "now" });
+      }
+    }),
+  );
+
+  it.effect(
+    "maps every German month and the December year boundary",
+    Effect.fn(function* () {
       const months = [
         "Januar",
         "Februar",
@@ -80,15 +116,17 @@ describe("German date ranges", () => {
     }),
   );
 
-  it.effect("parses year to date with an inclusive current endpoint", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "parses year to date with an inclusive current endpoint",
+    Effect.fn(function* () {
       const result = yield* parseGerman("Jahr bis heute");
       expect(formatFilter(result.range)).toEqual({ gte: "now/y", lte: "now" });
     }),
   );
 
-  it.effect("parses a fixed month as a half-open calendar period", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "parses a fixed month as a half-open calendar period",
+    Effect.fn(function* () {
       const result = yield* parseGerman("Januar 2025");
       expect(formatFilter(result.range)).toEqual({
         gte: "2025-01-01",
@@ -97,8 +135,9 @@ describe("German date ranges", () => {
     }),
   );
 
-  it.effect("keeps German named months relative to the selected year", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "keeps German named months relative to the selected year",
+    Effect.fn(function* () {
       const cases = [
         ["Januar letzten Jahres", "now-1y/y", "now-1y/y+1M"],
         ["Juni dieses Jahres", "now/y+5M", "now/y+6M"],
@@ -111,8 +150,9 @@ describe("German date ranges", () => {
     }),
   );
 
-  it.effect("distinguishes the German open-boundary terms", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "distinguishes the German open-boundary terms",
+    Effect.fn(function* () {
       const since = yield* parseGerman("seit Januar 2025");
       const before = yield* parseGerman("vor Januar 2025");
       const through = yield* parseGerman("bis einschließlich Januar 2025");
@@ -124,8 +164,9 @@ describe("German date ranges", () => {
     }),
   );
 
-  it.effect("uses and renders both full periods in a German from-to range", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "uses and renders both full periods in a German from-to range",
+    Effect.fn(function* () {
       const result = yield* parseGerman("von Februar 2024 bis März 2024");
       expect(formatFilter(result.range)).toEqual({
         gte: "2024-02-01",
@@ -144,8 +185,9 @@ describe("German date ranges", () => {
     }),
   );
 
-  it.effect("renders canonical German phrases", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "renders canonical German phrases",
+    Effect.fn(function* () {
       const complete = yield* parseGerman("JANUAR   2025");
       const open = yield* parseGerman("seit Januar 2025");
       const renderedComplete = yield* formatNatural(complete.range, {
@@ -159,8 +201,9 @@ describe("German date ranges", () => {
     }),
   );
 
-  it.effect("corrects German typos only in tolerant mode", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "corrects German typos only in tolerant mode",
+    Effect.fn(function* () {
       const result = yield* parseGerman("januar lezten jahres", "tolerant");
       expect(result.quality).toBe("corrected");
       expect(result.corrections).toMatchObject([
@@ -173,8 +216,9 @@ describe("German date ranges", () => {
     }),
   );
 
-  it.effect("does not correct short or over-budget German words", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "does not correct short or over-budget German words",
+    Effect.fn(function* () {
       const shortWord = yield* Effect.flip(parseGerman("mei 2025", "tolerant"));
       const distantWord = yield* Effect.flip(parseGerman("xxxxxxxx 2025", "tolerant"));
       expect(shortWord._tag).toBe("NaturalLanguageParseError");
@@ -182,8 +226,9 @@ describe("German date ranges", () => {
     }),
   );
 
-  it.effect("normalizes German Unicode width, case, and whitespace", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "normalizes German Unicode width, case, and whitespace",
+    Effect.fn(function* () {
       const result = yield* parseGerman("  ＭÄＲＺ　２０２４  ");
       expect(formatFilter(result.range)).toEqual({
         gte: "2024-03-01",
@@ -192,8 +237,9 @@ describe("German date ranges", () => {
     }),
   );
 
-  it.effect("rejects impossible, incomplete, and out-of-scope German input", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "rejects impossible, incomplete, and out-of-scope German input",
+    Effect.fn(function* () {
       const inputs = [
         "",
         "2025-02-29",
@@ -202,6 +248,9 @@ describe("German date ranges", () => {
         "Januar 2025 zusätzlich",
         "Jan 2025",
         "letzten Monat über",
+        "0 Monate",
+        "1 Monate",
+        "2 Monat",
         "zeige Ergebnisse seit Januar 2025",
       ];
       for (const input of inputs) {
@@ -211,8 +260,9 @@ describe("German date ranges", () => {
     }),
   );
 
-  it.effect("round-trips canonical German relative and fixed periods", () =>
-    Effect.gen(function* () {
+  it.effect(
+    "round-trips canonical German relative and fixed periods",
+    Effect.fn(function* () {
       const phrases = [
         "heute",
         "letzte Woche",
