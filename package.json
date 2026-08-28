@@ -18,6 +18,7 @@
     ".": "./dist/index.mjs",
     "./ast": "./dist/ast.mjs",
     "./format": "./dist/format.mjs",
+    "./locales/cs": "./dist/locales/cs.mjs",
     "./locales/de": "./dist/locales/de.mjs",
     "./locales/default": "./dist/locales/default.mjs",
     "./locales/en": "./dist/locales/en.mjs",
