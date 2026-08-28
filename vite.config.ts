@@ -43,6 +43,7 @@ export default defineConfig({
       "anti-slop/no-known-value-widening": "error",
       "anti-slop/no-manual-tags": "error",
       "anti-slop/no-module-mocking": "error",
+      "anti-slop/no-nested-ternaries": "error",
       "anti-slop/no-object-parameters": "error",
       "anti-slop/no-reflect-apply": "error",
       "anti-slop/no-reflect-get": "error",

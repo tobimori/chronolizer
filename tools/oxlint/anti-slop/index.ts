@@ -6,6 +6,7 @@ import { noExplicitReturnTypesRule } from "./rules/no-explicit-return-types.ts";
 import { noKnownValueWideningRule } from "./rules/no-known-value-widening.ts";
 import { noManualTagsRule } from "./rules/no-manual-tags.ts";
 import { noModuleMockingRule } from "./rules/no-module-mocking.ts";
+import { noNestedTernariesRule } from "./rules/no-nested-ternaries.ts";
 import { noObjectParametersRule } from "./rules/no-object-parameters.ts";
 import { noReflectApplyRule } from "./rules/no-reflect-apply.ts";
 import { noReflectGetRule } from "./rules/no-reflect-get.ts";
@@ -28,6 +29,7 @@ const antiSlopPlugin = eslintCompatPlugin({
 		"no-known-value-widening": noKnownValueWideningRule,
 		"no-manual-tags": noManualTagsRule,
 		"no-module-mocking": noModuleMockingRule,
+		"no-nested-ternaries": noNestedTernariesRule,
 		"no-object-parameters": noObjectParametersRule,
 		"no-reflect-apply": noReflectApplyRule,
 		"no-reflect-get": noReflectGetRule,
