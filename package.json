@@ -26,8 +26,10 @@
   },
   "devDependencies": {
     "@effect/vitest": "4.0.0-rc.112",
+    "@oxlint/plugins": "1.80.0",
     "@types/node": "^26.1.1",
     "bumpp": "^11.1.0",
+    "oxlint": "1.80.0",
     "typescript": "^7.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:"
