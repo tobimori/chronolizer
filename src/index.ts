@@ -7,6 +7,7 @@ export * from "./filter/codec.ts";
 export * from "./filter/errors.ts";
 export * from "./filter/expression.ts";
 export * from "./filter/schema.ts";
+export * from "./filter/transformation.ts";
 
 export * from "./language/errors.ts";
 export * from "./language/model.ts";

@@ -13,6 +13,7 @@ import { Unit } from "../src/ast/schemas.ts";
 import { parseFilter, formatFilter } from "../src/filter/codec.ts";
 import { formatInstantExpression, parseInstantExpression } from "../src/filter/expression.ts";
 import { DateFilter } from "../src/filter/schema.ts";
+import { DateRangeFromFilter, InstantExpressionFromString } from "../src/filter/transformation.ts";
 
 const runParse = (input: string) => Effect.runSync(parseInstantExpression(input));
 
@@ -31,6 +32,14 @@ describe("filter expressions", () => {
     const expression = runParse("now+3M-1M");
     expect(formatInstantExpression(normalizeInstant(expression))).toBe("now+2M");
   });
+
+  it.effect("provides a bidirectional Effect Schema expression codec", () =>
+    Effect.gen(function* () {
+      const expression = yield* Schema.decodeEffect(InstantExpressionFromString)("now-1y/y");
+      const encoded = yield* Schema.encodeEffect(InstantExpressionFromString)(expression);
+      expect(encoded).toBe("now-1y/y");
+    }),
+  );
 
   it.each([
     ["2025-01-01+1M", 10, '"||" before date operations'],
@@ -57,6 +66,17 @@ describe("date filters", () => {
       }
     }
   });
+
+  it.effect("decodes an external filter through one Effect Schema codec", () =>
+    Effect.gen(function* () {
+      const range = yield* Schema.decodeEffect(DateRangeFromFilter)({
+        gte: "now/y",
+        lte: "now",
+      });
+      const encoded = yield* Schema.encodeEffect(DateRangeFromFilter)(range);
+      expect(encoded).toEqual({ gte: "now/y", lte: "now" });
+    }),
+  );
 
   it.effect("round-trips a relative bounded range", () =>
     Effect.gen(function* () {
