@@ -22,6 +22,7 @@
     "./locales/default": "./dist/locales/default.mjs",
     "./locales/en": "./dist/locales/en.mjs",
     "./locales/es": "./dist/locales/es.mjs",
+    "./locales/fr": "./dist/locales/fr.mjs",
     "./parse": "./dist/parse.mjs",
     "./package.json": "./package.json"
   },
