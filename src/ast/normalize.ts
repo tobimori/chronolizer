@@ -1,72 +1,60 @@
+import { Match } from "effect";
+
+import {
+  boundedRange,
+  dateLiteral,
+  greaterThan,
+  greaterThanOrEqual,
+  lessThan,
+  lessThanOrEqual,
+  lowerOpenRange,
+  now,
+  shift,
+  startOf,
+  upperOpenRange,
+} from "./constructors.ts";
 import type { DateRangeExpr, InstantExpr, LowerBound, UpperBound } from "./schemas.ts";
 
 // RETURN TYPE: TypeScript needs the recursive function contract before initialization.
-export const normalizeInstant = (expression: InstantExpr): InstantExpr => {
-  switch (expression._tag) {
-    case "Now":
-    case "DateLiteral":
-      return expression;
-    case "StartOf":
-      return {
-        _tag: "StartOf",
-        base: normalizeInstant(expression.base),
-        unit: expression.unit,
-      };
-    case "Shift": {
-      const base = normalizeInstant(expression.base);
-      if (expression.amount === 0) return base;
-      if (base._tag === "Shift" && base.unit === expression.unit) {
-        const amount = base.amount + expression.amount;
+export const normalizeInstant = (expression: InstantExpr): InstantExpr =>
+  Match.valueTags(expression, {
+    Now: () => now(),
+    DateLiteral: (literal) => dateLiteral(literal.value),
+    StartOf: (operation) => startOf(normalizeInstant(operation.base), operation.unit),
+    Shift: (operation) => {
+      const base = normalizeInstant(operation.base);
+      if (operation.amount === 0) return base;
+      if (base._tag === "Shift" && base.unit === operation.unit) {
+        const amount = base.amount + operation.amount;
         if (Number.isSafeInteger(amount)) {
-          return normalizeInstant({
-            _tag: "Shift",
-            base: base.base,
-            amount,
-            unit: expression.unit,
-          });
+          return normalizeInstant(shift(base.base, amount, operation.unit));
         }
       }
-      return {
-        _tag: "Shift",
-        base,
-        amount: expression.amount,
-        unit: expression.unit,
-      };
-    }
-  }
-};
+      return shift(base, operation.amount, operation.unit);
+    },
+  });
 
 const normalizeLower = (bound: LowerBound) =>
-  ({
-    _tag: bound._tag,
-    value: normalizeInstant(bound.value),
-  }) satisfies LowerBound;
+  Match.valueTags(bound, {
+    GreaterThan: (value) => greaterThan(normalizeInstant(value.value)),
+    GreaterThanOrEqual: (value) => greaterThanOrEqual(normalizeInstant(value.value)),
+  });
 
 const normalizeUpper = (bound: UpperBound) =>
-  ({
-    _tag: bound._tag,
-    value: normalizeInstant(bound.value),
-  }) satisfies UpperBound;
+  Match.valueTags(bound, {
+    LessThan: (value) => lessThan(normalizeInstant(value.value)),
+    LessThanOrEqual: (value) => lessThanOrEqual(normalizeInstant(value.value)),
+  });
 
 export const normalizeRange = (range: DateRangeExpr) => {
   if (range.lower !== undefined && range.upper !== undefined) {
-    return {
-      _tag: "DateRange",
-      lower: normalizeLower(range.lower),
-      upper: normalizeUpper(range.upper),
-    } satisfies DateRangeExpr;
+    return boundedRange(normalizeLower(range.lower), normalizeUpper(range.upper));
   }
   if (range.lower !== undefined) {
-    return {
-      _tag: "DateRange",
-      lower: normalizeLower(range.lower),
-    } satisfies DateRangeExpr;
+    return lowerOpenRange(normalizeLower(range.lower));
   }
   if (range.upper !== undefined) {
-    return {
-      _tag: "DateRange",
-      upper: normalizeUpper(range.upper),
-    } satisfies DateRangeExpr;
+    return upperOpenRange(normalizeUpper(range.upper));
   }
   throw new Error("DateRangeExpr must contain at least one bound");
 };

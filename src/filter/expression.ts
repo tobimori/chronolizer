@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 
+import { dateLiteral, now, shift, startOf } from "../ast/constructors.ts";
 import { foldInstant } from "../ast/fold.ts";
 import { normalizeInstant } from "../ast/normalize.ts";
 import { isIsoDate } from "../ast/schemas.ts";
@@ -51,14 +52,14 @@ export const parseInstantExpression = (input: string) =>
     let fixedAnchor = false;
 
     if (input.startsWith("now")) {
-      expression = { _tag: "Now" };
+      expression = now();
       cursor = 3;
     } else {
       const candidate = input.slice(0, 10);
       if (!isIsoDate(candidate)) {
         return yield* failAt(input, 0, '"now" or an ISO date (YYYY-MM-DD)');
       }
-      expression = { _tag: "DateLiteral", value: candidate };
+      expression = dateLiteral(candidate);
       cursor = 10;
       fixedAnchor = true;
     }
@@ -77,7 +78,7 @@ export const parseInstantExpression = (input: string) =>
         if (unit === undefined) {
           return yield* failAt(input, cursor + 1, "a date unit: d, w, M, q, or y");
         }
-        expression = { _tag: "StartOf", base: expression, unit };
+        expression = startOf(expression, unit);
         cursor += 2;
         continue;
       }
@@ -99,12 +100,7 @@ export const parseInstantExpression = (input: string) =>
       if (unit === undefined) {
         return yield* failAt(input, cursor, "a date unit: d, w, M, q, or y");
       }
-      expression = {
-        _tag: "Shift",
-        base: expression,
-        amount: operator === "+" ? amount : -amount,
-        unit,
-      };
+      expression = shift(expression, operator === "+" ? amount : -amount, unit);
       cursor += 1;
     }
 

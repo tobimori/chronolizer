@@ -63,22 +63,26 @@ const ShiftAmount = Schema.Int.check(
   Schema.isBetween({ minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER }),
 );
 
+export const Shift: Schema.Codec<Shift> = Schema.TaggedStruct("Shift", {
+  base: Schema.suspend(
+    // RETURN TYPE: TypeScript needs the recursive schema contract before initialization.
+    (): Schema.Codec<InstantExpr> => InstantExpr,
+  ),
+  amount: ShiftAmount,
+  unit: Unit,
+});
+
+export const StartOf: Schema.Codec<StartOf> = Schema.TaggedStruct("StartOf", {
+  base: Schema.suspend(
+    // RETURN TYPE: TypeScript needs the recursive schema contract before initialization.
+    (): Schema.Codec<InstantExpr> => InstantExpr,
+  ),
+  unit: Unit,
+});
+
 export const InstantExpr: Schema.Codec<InstantExpr> = Schema.suspend(
   // RETURN TYPE: TypeScript needs the recursive schema contract before initialization.
-  (): Schema.Codec<InstantExpr> =>
-    Schema.Union([
-      Now,
-      DateLiteral,
-      Schema.TaggedStruct("Shift", {
-        base: InstantExpr,
-        amount: ShiftAmount,
-        unit: Unit,
-      }),
-      Schema.TaggedStruct("StartOf", {
-        base: InstantExpr,
-        unit: Unit,
-      }),
-    ]),
+  (): Schema.Codec<InstantExpr> => Schema.Union([Now, DateLiteral, Shift, StartOf]),
 ).annotate({ identifier: "InstantExpr" });
 
 export const GreaterThan = Schema.TaggedStruct("GreaterThan", {
