@@ -684,7 +684,7 @@ const renderPolish = (range: DateRangeExpr) => {
   const periods = [
     ...staticPeriods,
     ...periodsFromPhrases(
-      [...datedPeriods(range, months), ...datedQuarterPeriods(range).map((phrase) => phrase)],
+      [...datedPeriods(range, months), ...datedQuarterPeriods(range)],
       parsePeriod,
     ),
   ];

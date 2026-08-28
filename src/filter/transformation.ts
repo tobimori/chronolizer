@@ -1,4 +1,4 @@
-import { Effect, Schema, SchemaIssue, SchemaTransformation } from "effect";
+import { Effect, Match, Schema, SchemaIssue, SchemaTransformation } from "effect";
 
 import { DateRangeExpr, InstantExpr } from "../ast/schemas.ts";
 import { formatFilter, parseFilter } from "./codec.ts";
@@ -32,10 +32,11 @@ export const DateRangeFromFilter = DateFilter.pipe(
           parseFilter(filter),
           (error) =>
             new SchemaIssue.Forbidden({
-              message:
-                error._tag === "FilterExpressionParseError"
-                  ? `Invalid filter expression at offset ${error.offset}: expected ${error.expected}`
-                  : error.message,
+              message: Match.valueTags(error, {
+                FilterExpressionParseError: (parseError) =>
+                  `Invalid filter expression at offset ${parseError.offset}: expected ${parseError.expected}`,
+                InvalidDateFilterError: (filterError) => filterError.message,
+              }),
             }),
         ),
       encode: (range) => Effect.succeed(formatFilter(range)),

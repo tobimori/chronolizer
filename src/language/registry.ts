@@ -92,12 +92,15 @@ const localeCandidates = (locale: string) => {
 const compileLanguage = (locale: string, registered: ReadonlyArray<RegisteredContribution>) => {
   const locales = localeCandidates(locale);
   const bases = EffectArray.sort(
-    EffectArray.filterMap<RegisteredContribution, RegisteredBase, void>(registered, (entry) => {
-      const contribution = entry.contribution;
-      return contribution._tag === "BaseLanguage" && locales.includes(contribution.locale)
-        ? Result.succeed({ pluginId: entry.pluginId, contribution })
-        : Result.failVoid;
-    }),
+    EffectArray.filterMap<RegisteredContribution, RegisteredBase, void>(registered, (entry) =>
+      Match.valueTags(entry.contribution, {
+        BaseLanguage: (contribution) =>
+          locales.includes(contribution.locale)
+            ? Result.succeed({ pluginId: entry.pluginId, contribution })
+            : Result.failVoid,
+        LanguageExtension: () => Result.failVoid,
+      }),
+    ),
     Order.mapInput(Order.Number, (entry: RegisteredBase) =>
       locales.indexOf(entry.contribution.locale),
     ),
@@ -106,14 +109,14 @@ const compileLanguage = (locale: string, registered: ReadonlyArray<RegisteredCon
   if (base === undefined) return Option.none<CompiledLanguage>();
 
   const extensions = EffectArray.sort(
-    EffectArray.filterMap<RegisteredContribution, RegisteredExtension, void>(
-      registered,
-      (entry) => {
-        const contribution = entry.contribution;
-        return contribution._tag === "LanguageExtension" && locales.includes(contribution.locale)
-          ? Result.succeed({ pluginId: entry.pluginId, contribution })
-          : Result.failVoid;
-      },
+    EffectArray.filterMap<RegisteredContribution, RegisteredExtension, void>(registered, (entry) =>
+      Match.valueTags(entry.contribution, {
+        BaseLanguage: () => Result.failVoid,
+        LanguageExtension: (contribution) =>
+          locales.includes(contribution.locale)
+            ? Result.succeed({ pluginId: entry.pluginId, contribution })
+            : Result.failVoid,
+      }),
     ),
     Order.combine(
       Order.mapInput(
@@ -186,13 +189,16 @@ const createRegistry = Effect.fn(function* () {
         ReadonlyArray<RegisteredContribution>,
         Result.Result<symbol, LanguageConflictError>
       >(entries, (current) => {
-        const conflictingBase = EffectArray.findFirst(
-          current,
-          (entry) =>
-            contribution._tag === "BaseLanguage" &&
-            entry.contribution._tag === "BaseLanguage" &&
-            entry.contribution.locale === contribution.locale,
-        );
+        const conflictingBase = Match.valueTags(contribution, {
+          BaseLanguage: (base) =>
+            EffectArray.findFirst(current, (entry) =>
+              Match.valueTags(entry.contribution, {
+                BaseLanguage: (registeredBase) => registeredBase.locale === base.locale,
+                LanguageExtension: () => false,
+              }),
+            ),
+          LanguageExtension: () => Option.none<RegisteredContribution>(),
+        });
         return Option.match(conflictingBase, {
           onNone: () =>
             [
