@@ -10,10 +10,9 @@ interface PartialCorrection {
   readonly offset: number;
 }
 
-const isProtectedToken = (word: string) =>
+const isProtectedValue = (word: string) =>
   Option.isSome(EffectString.match(/^\d+$/u)(word)) ||
-  Option.isSome(EffectString.match(/^\d{4}-\d{2}-\d{2}$/u)(word)) ||
-  word.length <= 3;
+  Option.isSome(EffectString.match(/^\d{4}-\d{2}-\d{2}$/u)(word));
 
 export const damerauLevenshteinDistance = (left: string, right: string) => {
   const fallback = left.length + right.length;
@@ -46,8 +45,8 @@ export const damerauLevenshteinDistance = (left: string, right: string) => {
 };
 
 const replacementsFor = (word: string, vocabulary: ReadonlyArray<string>) => {
-  if (vocabulary.includes(word)) return [{ word, distance: 0 }];
-  if (isProtectedToken(word)) return [];
+  if (vocabulary.includes(word) || isProtectedValue(word)) return [{ word, distance: 0 }];
+  if (word.length <= 3) return [];
   const maximum = word.length >= 6 ? 2 : 1;
   const matches = vocabulary
     .filter((candidate) => Math.abs(candidate.length - word.length) <= maximum)

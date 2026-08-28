@@ -9,6 +9,7 @@ export default defineConfig({
       parse: "src/entries/parse.ts",
       "locales/en": "src/locales/en.ts",
       "locales/de": "src/locales/de.ts",
+      "locales/es": "src/locales/es.ts",
       "locales/default": "src/locales/default.ts",
     },
     dts: {

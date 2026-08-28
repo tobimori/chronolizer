@@ -13,14 +13,11 @@ const fuzzyPrefixDistance = (input: string, target: string) => {
   );
 };
 
-const completionCost = (input: string, target: string, isLast: boolean) => {
-  if (input === target) return 0;
-  if (isLast && target.startsWith(input)) return 0;
+const completionCost = (input: string, target: string) => {
+  if (input === target || target.startsWith(input)) return 0;
   if (input.length < 3 || input[0] !== target[0]) return undefined;
   const maximum = input.length >= 5 ? 2 : 1;
-  const distance = isLast
-    ? fuzzyPrefixDistance(input, target)
-    : damerauLevenshteinDistance(input, target);
+  const distance = fuzzyPrefixDistance(input, target);
   return distance <= maximum ? distance : undefined;
 };
 
@@ -36,7 +33,7 @@ const phraseScore = (input: string, phrase: string) => {
   for (const [index, inputWord] of inputWords.entries()) {
     const targetWord = phraseWords[index];
     if (targetWord === undefined) return undefined;
-    const wordCost = completionCost(inputWord, targetWord, index === inputWords.length - 1);
+    const wordCost = completionCost(inputWord, targetWord);
     if (wordCost === undefined) return undefined;
     cost += wordCost;
   }

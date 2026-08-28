@@ -2,7 +2,7 @@
 
 Chronolizer is an Effect v4 library for bidirectional natural-language date ranges.
 
-It converts complete English and German date-range expressions to a small date-math format. It also renders supported ranges to canonical natural language and resolves the AST with an explicit Effect time zone.
+It converts complete English, German, and Spanish date-range expressions to a small date-math format. It also renders supported ranges to canonical natural language and resolves the AST with an explicit Effect time zone.
 
 ## Status
 
@@ -22,7 +22,7 @@ import { EnglishLanguageLayer } from "chronolizer/locales/en";
 - `chronolizer/ast` contains the AST, compact filter codec, and resolver.
 - `chronolizer/parse` contains natural-text parsing, autocomplete, and language plugins. It does not load natural rendering.
 - `chronolizer/format` contains AST-to-natural rendering. It does not load parsing or autocomplete.
-- `chronolizer/locales/en`, `chronolizer/locales/de`, and `chronolizer/locales/default` expose language packs separately.
+- `chronolizer/locales/en`, `chronolizer/locales/de`, `chronolizer/locales/es`, and `chronolizer/locales/default` expose language packs separately.
 - `chronolizer` and `chronolizer/locales/default` include English only.
 - Every non-English language must be imported from its own locale subpath.
 
@@ -80,7 +80,7 @@ seit Januar 2025                -> { gte: "2025-01-01" }
 
 Chronolizer parses the complete input. It does not extract a date phrase from a larger sentence.
 
-Supported families include named and abbreviated months, named dates, quarters, weekends, period starts and ends, past and future rolling windows, calendar offsets, open boundaries, `now`-bounded ranges, and explicit inclusive connectors. English and German use their own grammar and canonical forms.
+Supported families include named and abbreviated months, named dates, quarters, weekends, period starts and ends, past and future rolling windows, calendar offsets, open boundaries, `now`-bounded ranges, and explicit inclusive connectors. Each language uses its own grammar and canonical forms.
 
 ## Autocomplete natural language
 
@@ -229,6 +229,7 @@ Built-in plugins:
 
 - `EnglishLanguage`
 - `GermanLanguage`
+- `SpanishLanguage`
 - `DefaultLanguageLayer` (English only)
 
 Import every non-English language from its locale subpath. This keeps the default bundle small and makes language selection explicit.
