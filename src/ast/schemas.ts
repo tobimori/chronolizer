@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Option, Schema, String as EffectString } from "effect";
 
 export const Unit = Schema.Literals(["day", "week", "month", "quarter", "year"]);
 export type Unit = typeof Unit.Type;
@@ -20,7 +20,9 @@ const daysInMonth = (year: number, month: number) => {
 };
 
 export const isIsoDate = (value: string) => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  if (Option.isNone(EffectString.match(/^\d{4}-\d{2}-\d{2}$/)(value))) {
+    return false;
+  }
   const year = Number(value.slice(0, 4));
   const month = Number(value.slice(5, 7));
   const day = Number(value.slice(8, 10));
