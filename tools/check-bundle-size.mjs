@@ -19,6 +19,7 @@ const limits = new Map([
   ["locales/es.mjs", 28_000],
   ["locales/fr.mjs", 28_000],
   ["locales/nl.mjs", 28_000],
+  ["locales/tr.mjs", 28_000],
   ["locales/default.mjs", 24_000],
   ["index.mjs", 32_000],
 ]);
@@ -43,8 +44,14 @@ const forbiddenPrefixes = new Map([
   ["ast.mjs", ["registry-", "suggest-", "suggestion-", "format-"]],
   ["parse.mjs", ["format-"]],
   ["format.mjs", ["suggest-", "suggestion-"]],
-  ["locales/default.mjs", ["locales/de.mjs", "locales/es.mjs", "locales/fr.mjs", "locales/nl.mjs"]],
-  ["index.mjs", ["locales/de.mjs", "locales/es.mjs", "locales/fr.mjs", "locales/nl.mjs"]],
+  [
+    "locales/default.mjs",
+    ["locales/de.mjs", "locales/es.mjs", "locales/fr.mjs", "locales/nl.mjs", "locales/tr.mjs"],
+  ],
+  [
+    "index.mjs",
+    ["locales/de.mjs", "locales/es.mjs", "locales/fr.mjs", "locales/nl.mjs", "locales/tr.mjs"],
+  ],
 ]);
 
 const report = {};
