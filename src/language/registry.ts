@@ -19,9 +19,11 @@ import {
 } from "./errors.ts";
 import {
   BaseLanguageMetadata,
+  canonicalBaseLocale,
   LanguageContributionMetadata,
   LanguageExtensionMetadata,
 } from "./model.ts";
+import { normalizeNaturalText } from "../natural/text.ts";
 import type {
   BaseLanguageContribution,
   CompiledLanguage,
@@ -78,8 +80,13 @@ const metadataOf = (contribution: LanguageContribution) =>
   });
 
 const localeCandidates = (locale: string) => {
-  const separator = locale.indexOf("-");
-  return separator === -1 ? [locale] : [locale, locale.slice(0, separator)];
+  const candidates = [locale];
+  let parent = locale;
+  while (parent.includes("-")) {
+    parent = parent.slice(0, parent.lastIndexOf("-"));
+    candidates.push(parent);
+  }
+  return candidates;
 };
 
 const compileLanguage = (locale: string, registered: ReadonlyArray<RegisteredContribution>) => {
@@ -140,6 +147,8 @@ const compileLanguage = (locale: string, registered: ReadonlyArray<RegisteredCon
     Object.freeze({
       locale: base.contribution.locale,
       vocabulary,
+      normalize: base.contribution.normalize ?? normalizeNaturalText,
+      correct: base.contribution.correct,
       parseExact,
       render: base.contribution.render,
     }),
@@ -205,8 +214,11 @@ const createRegistry = Effect.fn(function* () {
   });
 
   const resolve: LanguageRegistry.Service["resolve"] = Effect.fn(function* (locale: string) {
-    const compiled = compileLanguage(locale, yield* Ref.get(entries));
-    if (Option.isSome(compiled)) return compiled.value;
+    const canonical = canonicalBaseLocale(locale);
+    if (Option.isSome(canonical)) {
+      const compiled = compileLanguage(canonical.value, yield* Ref.get(entries));
+      if (Option.isSome(compiled)) return compiled.value;
+    }
     return yield* new UnsupportedLocaleError({ locale });
   });
 

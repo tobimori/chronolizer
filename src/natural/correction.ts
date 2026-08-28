@@ -1,12 +1,7 @@
 import { Option, String as EffectString } from "effect";
 
-import { Correction } from "../language/model.ts";
-
-interface CorrectedText {
-  readonly text: string;
-  readonly corrections: ReadonlyArray<Correction>;
-  readonly cost: number;
-}
+import { Correction, NaturalCorrectionCandidate } from "../language/model.ts";
+import { naturalWords } from "./text.ts";
 
 interface PartialCorrection {
   readonly words: ReadonlyArray<string>;
@@ -63,7 +58,11 @@ const replacementsFor = (word: string, vocabulary: ReadonlyArray<string>) => {
   return matches.filter((candidate) => candidate.distance === minimum).slice(0, 4);
 };
 
-export const correctedTexts = (words: ReadonlyArray<string>, vocabulary: ReadonlyArray<string>) => {
+export const correctWhitespaceSeparatedText = (
+  input: string,
+  vocabulary: ReadonlyArray<string>,
+) => {
+  const words = naturalWords(input);
   let partials: ReadonlyArray<PartialCorrection> = [
     { words: [], corrections: [], cost: 0, offset: 0 },
   ];
@@ -99,12 +98,11 @@ export const correctedTexts = (words: ReadonlyArray<string>, vocabulary: Readonl
 
   return partials
     .filter((partial) => partial.corrections.length > 0)
-    .map(
-      (partial) =>
-        ({
-          text: partial.words.join(" "),
-          corrections: partial.corrections,
-          cost: partial.cost,
-        }) satisfies CorrectedText,
+    .map((partial) =>
+      NaturalCorrectionCandidate.make({
+        text: partial.words.join(" "),
+        corrections: partial.corrections,
+        cost: partial.cost,
+      }),
     );
 };

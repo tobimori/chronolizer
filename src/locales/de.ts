@@ -11,6 +11,8 @@ import { isIsoDate } from "../ast/schemas.ts";
 import type { DateRangeExpr, Unit } from "../ast/schemas.ts";
 import { BaseLanguageContribution } from "../language/model.ts";
 import { defineLanguagePlugin, languagePluginsLayer } from "../language/registry.ts";
+import { correctWhitespaceSeparatedText } from "../natural/correction.ts";
+import { normalizeNaturalText } from "../natural/text.ts";
 import {
   candidate,
   expressionDates,
@@ -335,6 +337,8 @@ export const GermanContribution = new BaseLanguageContribution({
     "vor",
     "von",
   ],
+  normalize: normalizeNaturalText,
+  correct: correctWhitespaceSeparatedText,
   parseExact: parseGerman,
   render: renderGerman,
 });

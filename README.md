@@ -150,10 +150,23 @@ Strict mode never runs correction.
 
 `LanguageRegistry` is an Effect service. A language is a scoped plugin contribution. `languagePluginsLayer` validates plugin identifiers, rejects conflicting base languages, applies deterministic extension order, and removes registrations when the Layer scope closes.
 
+Language identifiers use canonical BCP 47 base tags. Lookup removes one subtag at a time. For example, `zh-Hant-TW` tries `zh-Hant-TW`, `zh-Hant`, and then `zh`.
+
+Each base language owns:
+
+- exact parsing and canonical rendering;
+- optional text normalization;
+- its typo-correction strategy, which can be disabled;
+- vocabulary shared with registered language extensions.
+
+`normalizeNaturalText` and `correctWhitespaceSeparatedText` are available for languages that use whitespace-separated words. A compact-script language can provide character, dictionary, or `Intl.Segmenter` based correction without changing Chronolizer core.
+
 Built-in plugins:
 
 - `EnglishLanguage`
 - `GermanLanguage`
 - `DefaultLanguageLayer`
+
+Chinese and Japanese language packs are not included yet.
 
 Business calendars, holidays, times of day, recurrence, and sentence extraction are outside v1. A future business-day feature will use an injected calendar service.

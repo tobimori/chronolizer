@@ -6,8 +6,6 @@ import { NaturalLanguageParseError, NaturalLanguageRenderError } from "../langua
 import { LanguageRegistry } from "../language/registry.ts";
 import { NaturalAlternative, NaturalParseResult } from "../language/model.ts";
 import type { Correction, NaturalCandidate } from "../language/model.ts";
-import { correctedTexts } from "./correction.ts";
-import { naturalWords, normalizeNaturalText } from "./text.ts";
 
 export interface ParseNaturalOptions {
   readonly locale: string;
@@ -54,7 +52,7 @@ export const parseNatural = Effect.fn("chronolizer.parseNatural")(function* (
 ) {
   const registry = yield* LanguageRegistry;
   const language = yield* registry.resolve(options.locale);
-  const normalized = normalizeNaturalText(input, language.locale);
+  const normalized = language.normalize(input, language.locale);
   if (normalized.length === 0) {
     return yield* new NaturalLanguageParseError({
       input,
@@ -73,7 +71,7 @@ export const parseNatural = Effect.fn("chronolizer.parseNatural")(function* (
     });
   }
 
-  const corrected = correctedTexts(naturalWords(normalized), language.vocabulary);
+  const corrected = language.correct?.(normalized, language.vocabulary) ?? [];
   const parsedCorrections = EffectArray.map(corrected, (entry) => ({
     ...entry,
     candidates: language.parseExact(entry.text),

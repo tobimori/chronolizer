@@ -1,11 +1,17 @@
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Option } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 import { now, shift, startOf } from "../src/ast/constructors.ts";
 import { completePeriod } from "../src/filter/codec.ts";
 import { EnglishContribution, EnglishLanguage } from "../src/locales/en.ts";
 import { candidate } from "../src/locales/shared.ts";
-import { BaseLanguageContribution, LanguageExtensionContribution } from "../src/language/model.ts";
+import {
+  BaseLanguageContribution,
+  Correction,
+  LanguageExtensionContribution,
+  Locale,
+  NaturalCorrectionCandidate,
+} from "../src/language/model.ts";
 import type { LanguagePlugin } from "../src/language/model.ts";
 import {
   LanguageRegistry,
@@ -13,10 +19,13 @@ import {
   languagePluginsLayer,
 } from "../src/language/registry.ts";
 import { parseNatural } from "../src/natural/api.ts";
+import { correctWhitespaceSeparatedText } from "../src/natural/correction.ts";
+import { normalizeNaturalText } from "../src/natural/text.ts";
 
 const alternateEnglish = new BaseLanguageContribution({
   locale: "en",
   vocabulary: ["now"],
+  correct: undefined,
   parseExact: () => Option.none(),
   render: () => Option.none(),
 });
@@ -29,6 +38,7 @@ const alternatePlugin = {
 const ambiguousLanguage = new BaseLanguageContribution({
   locale: "xx",
   vocabulary: ["bake", "bike"],
+  correct: correctWhitespaceSeparatedText,
   parseExact: (input) => {
     if (input !== "bake" && input !== "bike") return Option.none();
     const offset = input === "bake" ? 0 : 1;
@@ -63,6 +73,7 @@ const extensionPlugin = (id: string, priority: number, canonical: string, offset
 const regionalEnglish = new BaseLanguageContribution({
   locale: "en-US",
   vocabulary: ["regional"],
+  correct: undefined,
   parseExact: () => Option.none(),
   render: () => Option.none(),
 });
@@ -70,6 +81,53 @@ const regionalEnglish = new BaseLanguageContribution({
 const regionalPlugin = {
   id: "example/en-us",
   effect: (context) => Effect.asVoid(context.register("example/en-us", regionalEnglish)),
+} satisfies LanguagePlugin;
+
+const scriptLanguage = new BaseLanguageContribution({
+  locale: "zh-Hant",
+  vocabulary: [],
+  correct: undefined,
+  parseExact: () => Option.none(),
+  render: () => Option.none(),
+});
+
+const scriptPlugin = {
+  id: "example/script-locale",
+  effect: (context) => Effect.asVoid(context.register("example/script-locale", scriptLanguage)),
+} satisfies LanguagePlugin;
+
+const compactLanguage = new BaseLanguageContribution({
+  locale: "zxx",
+  vocabulary: [],
+  normalize: (input, locale) => normalizeNaturalText(input, locale).replaceAll(" ", ""),
+  correct: (input) =>
+    input === "lastmont"
+      ? [
+          NaturalCorrectionCandidate.make({
+            text: "lastmonth",
+            cost: 1,
+            corrections: [
+              Correction.make({
+                original: "mont",
+                replacement: "month",
+                distance: 1,
+                offset: 4,
+              }),
+            ],
+          }),
+        ]
+      : [],
+  parseExact: (input) => {
+    if (input !== "lastmonth") return Option.none();
+    const start = startOf(shift(now(), -1, "month"), "month");
+    return Option.some(candidate(completePeriod(start, shift(start, 1, "month")), "lastmonth"));
+  },
+  render: () => Option.none(),
+});
+
+const compactPlugin = {
+  id: "example/compact-text",
+  effect: (context) => Effect.asVoid(context.register("example/compact-text", compactLanguage)),
 } satisfies LanguagePlugin;
 
 describe("language registry", () => {
@@ -95,6 +153,70 @@ describe("language registry", () => {
       },
       Effect.provide(languagePluginsLayer([EnglishLanguage, regionalPlugin])),
     ),
+  );
+
+  it("validates canonical BCP 47 language, script, and region tags", () => {
+    const isLocale = Schema.is(Locale);
+    expect(isLocale("ja")).toBe(true);
+    expect(isLocale("ja-JP")).toBe(true);
+    expect(isLocale("zh-Hant")).toBe(true);
+    expect(isLocale("zh-Hant-TW")).toBe(true);
+    expect(isLocale("zh-hant")).toBe(false);
+  });
+
+  it.effect(
+    "preserves script subtags during canonical locale fallback",
+    Effect.fn(
+      function* () {
+        const registry = yield* LanguageRegistry;
+        const language = yield* registry.resolve("ZH-hant-tw");
+        expect(language.locale).toBe("zh-Hant");
+      },
+      Effect.provide(languagePluginsLayer([scriptPlugin])),
+    ),
+  );
+
+  it.effect(
+    "delegates compact-text normalization to the language pack",
+    Effect.fn(
+      function* () {
+        const result = yield* parseNatural("LAST MONTH", { locale: "zxx" });
+        expect(result.quality).toBe("exact");
+      },
+      Effect.provide(languagePluginsLayer([compactPlugin])),
+    ),
+  );
+
+  it.effect(
+    "delegates compact-text correction to the language pack",
+    Effect.fn(
+      function* () {
+        const result = yield* parseNatural("lastmont", {
+          locale: "zxx",
+          typoMode: "tolerant",
+        });
+        expect(result.quality).toBe("corrected");
+        expect(result.corrections).toEqual([
+          {
+            original: "mont",
+            replacement: "month",
+            distance: 1,
+            offset: 4,
+          },
+        ]);
+      },
+      Effect.provide(languagePluginsLayer([compactPlugin])),
+    ),
+  );
+
+  it.effect(
+    "rejects an invalid locale identifier as unsupported",
+    Effect.fn(function* () {
+      const registry = yield* LanguageRegistry;
+      const error = yield* Effect.flip(registry.resolve("not a locale"));
+      expect(error._tag).toBe("UnsupportedLocaleError");
+      expect(error.locale).toBe("not a locale");
+    }, Effect.provide(LanguageRegistryLayer)),
   );
 
   it.effect(
@@ -126,7 +248,10 @@ describe("language registry", () => {
       const error = yield* Effect.flip(
         Effect.provide(Effect.void, languagePluginsLayer([EnglishLanguage, EnglishLanguage])),
       );
-      expect(error._tag).toBe("LanguageRegistrationError");
+      if (error._tag !== "LanguageRegistrationError") {
+        return expect.fail(`Expected LanguageRegistrationError, received ${error._tag}`);
+      }
+      expect(error.pluginId).toBe("chronolizer/language-en");
     }),
   );
 
@@ -137,6 +262,11 @@ describe("language registry", () => {
         Effect.provide(Effect.void, languagePluginsLayer([EnglishLanguage, alternatePlugin])),
       );
       expect(error._tag).toBe("LanguageConflictError");
+      expect(error).toMatchObject({
+        locale: "en",
+        firstPluginId: "chronolizer/language-en",
+        secondPluginId: "example/alternate-en",
+      });
     }),
   );
 
@@ -165,6 +295,7 @@ describe("language registry", () => {
       yield* Effect.scoped(registry.register("chronolizer/language-en", EnglishContribution));
       const error = yield* Effect.flip(registry.resolve("en"));
       expect(error._tag).toBe("UnsupportedLocaleError");
+      expect(error.locale).toBe("en");
     }, Effect.provide(LanguageRegistryLayer)),
   );
 

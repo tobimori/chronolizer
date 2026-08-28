@@ -1,5 +1,5 @@
-import { Data, Schema } from "effect";
-import type { Effect, Option, Scope } from "effect";
+import { Data, Option, Result, Schema } from "effect";
+import type { Effect, Scope } from "effect";
 
 import { DateRangeExpr } from "../ast/schemas.ts";
 import type { DateRangeExpr as DateRangeExprType } from "../ast/schemas.ts";
@@ -15,6 +15,13 @@ export const Correction = Schema.Struct({
   offset: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 export type Correction = typeof Correction.Type;
+
+export const NaturalCorrectionCandidate = Schema.Struct({
+  text: Schema.String,
+  corrections: Schema.Array(Correction),
+  cost: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+});
+export type NaturalCorrectionCandidate = typeof NaturalCorrectionCandidate.Type;
 
 export const NaturalAlternative = Schema.Struct({
   canonical: Schema.String,
@@ -39,6 +46,13 @@ export type NaturalCandidate = typeof NaturalCandidate.Type;
 export class BaseLanguageContribution extends Data.TaggedClass("BaseLanguage")<{
   readonly locale: string;
   readonly vocabulary: ReadonlyArray<string>;
+  readonly normalize?: (input: string, locale: string) => string;
+  readonly correct:
+    | ((
+        input: string,
+        vocabulary: ReadonlyArray<string>,
+      ) => ReadonlyArray<NaturalCorrectionCandidate>)
+    | undefined;
   readonly parseExact: (input: string) => Option.Option<NaturalCandidate>;
   readonly render: (range: DateRangeExprType) => Option.Option<string>;
 }> {}
@@ -52,7 +66,14 @@ export class LanguageExtensionContribution extends Data.TaggedClass("LanguageExt
 
 export type LanguageContribution = BaseLanguageContribution | LanguageExtensionContribution;
 
-const Locale = Schema.String.check(Schema.isPattern(/^[a-z]{2,3}(?:-[A-Z]{2})?$/));
+export const canonicalBaseLocale = (input: string) =>
+  Result.getSuccess(Result.try(() => new Intl.Locale(input).baseName));
+
+export const Locale = Schema.String.check(
+  Schema.makeFilter((value) => Option.contains(canonicalBaseLocale(value), value), {
+    expected: "a canonical BCP 47 base locale identifier",
+  }),
+).annotate({ identifier: "Locale" });
 
 export const BaseLanguageMetadata = Schema.TaggedStruct("BaseLanguage", {
   locale: Locale,
@@ -87,6 +108,13 @@ export interface LanguagePlugin {
 export interface CompiledLanguage {
   readonly locale: string;
   readonly vocabulary: ReadonlyArray<string>;
+  readonly normalize: (input: string, locale: string) => string;
+  readonly correct:
+    | ((
+        input: string,
+        vocabulary: ReadonlyArray<string>,
+      ) => ReadonlyArray<NaturalCorrectionCandidate>)
+    | undefined;
   readonly parseExact: (input: string) => ReadonlyArray<NaturalCandidate>;
   readonly render: (range: DateRangeExprType) => Option.Option<string>;
 }
