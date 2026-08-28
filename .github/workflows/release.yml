@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
   pull-requests: write
 
 concurrency:
@@ -44,5 +45,3 @@ jobs:
           commit-message: "release: update package version"
           pr-title: "release: update package version"
           create-github-releases: true
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -10,5 +10,5 @@ After changes reach `main`, the release workflow updates a release pull request.
 
 Repository setup requires:
 
-- an `NPM_TOKEN` Actions secret with publish access;
+- npm trusted publishing for `tobimori/chronolizer` and `release.yml`;
 - permission for GitHub Actions to create pull requests.

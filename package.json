@@ -1,13 +1,13 @@
 {
   "name": "chronolizer",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Bidirectional natural-language date ranges for Effect.",
   "homepage": "https://github.com/tobimori/chronolizer#readme",
   "bugs": "https://github.com/tobimori/chronolizer/issues",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tobimori/chronolizer.git"
+    "url": "https://github.com/tobimori/chronolizer.git"
   },
   "files": [
     "dist"
@@ -26,7 +26,7 @@
     "test": "vp test",
     "check": "vp check",
     "changeset": "changeset",
-    "version": "changeset version",
+    "version-packages": "changeset version",
     "release": "pnpm build && changeset publish",
     "prepublishOnly": "vp run build",
     "prepare": "effect-tsgo patch --typescript --oxlint"
