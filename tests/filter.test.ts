@@ -1,7 +1,15 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-
-import { normalizeInstant } from "../src/ast/normalize.ts";
+import {
+  boundedRange,
+  greaterThanOrEqual,
+  lessThan,
+  now,
+  shift,
+  startOf,
+} from "../src/ast/constructors.ts";
+import { normalizeInstant, normalizeRange } from "../src/ast/normalize.ts";
+import { Unit } from "../src/ast/schemas.ts";
 import { parseFilter, formatFilter } from "../src/filter/codec.ts";
 import { formatInstantExpression, parseInstantExpression } from "../src/filter/expression.ts";
 import { DateFilter } from "../src/filter/schema.ts";
@@ -38,6 +46,18 @@ describe("filter expressions", () => {
 });
 
 describe("date filters", () => {
+  it("round-trips the unit and relative-direction matrix", () => {
+    for (const unit of Unit.literals) {
+      for (const amount of [-2, -1, 1, 2]) {
+        const start = startOf(shift(now(), amount, unit), unit);
+        const range = boundedRange(greaterThanOrEqual(start), lessThan(shift(start, 1, unit)));
+        const normalized = normalizeRange(range);
+        const parsed = Effect.runSync(parseFilter(formatFilter(normalized)));
+        expect(parsed).toEqual(normalized);
+      }
+    }
+  });
+
   it.effect("round-trips a relative bounded range", () =>
     Effect.gen(function* () {
       const filter = { gte: "now-1y/y", lt: "now-1y/y+1M" };

@@ -27,6 +27,21 @@ describe("English date ranges", () => {
     }),
   );
 
+  it.effect("uses leap-year month and day boundaries", () =>
+    Effect.gen(function* () {
+      const month = yield* parseEnglish("February 2024");
+      const day = yield* parseEnglish("2024-02-29");
+      expect(formatFilter(month.range)).toEqual({
+        gte: "2024-02-01",
+        lt: "2024-03-01",
+      });
+      expect(formatFilter(day.range)).toEqual({
+        gte: "2024-02-29",
+        lt: "2024-03-01",
+      });
+    }),
+  );
+
   it.effect("keeps a named month relative to the current year", () =>
     Effect.gen(function* () {
       const result = yield* parseEnglish("January of last year");
@@ -60,13 +75,18 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect("renders a parsed range to canonical English", () =>
+  it.effect("renders parsed ranges to canonical English", () =>
     Effect.gen(function* () {
-      const parsed = yield* parseEnglish("JANUARY   2025");
-      const rendered = yield* formatNatural(parsed.range, { locale: "en" }).pipe(
-        Effect.provide(EnglishLanguageLayer),
-      );
-      expect(rendered).toBe("January 2025");
+      const complete = yield* parseEnglish("JANUARY   2025");
+      const open = yield* parseEnglish("since January 2025");
+      const renderedComplete = yield* formatNatural(complete.range, {
+        locale: "en",
+      }).pipe(Effect.provide(EnglishLanguageLayer));
+      const renderedOpen = yield* formatNatural(open.range, {
+        locale: "en",
+      }).pipe(Effect.provide(EnglishLanguageLayer));
+      expect(renderedComplete).toBe("January 2025");
+      expect(renderedOpen).toBe("since January 2025");
     }),
   );
 

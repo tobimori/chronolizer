@@ -59,13 +59,18 @@ describe("German date ranges", () => {
     }),
   );
 
-  it.effect("renders a canonical German phrase", () =>
+  it.effect("renders canonical German phrases", () =>
     Effect.gen(function* () {
-      const parsed = yield* parseGerman("JANUAR   2025");
-      const rendered = yield* formatNatural(parsed.range, { locale: "de" }).pipe(
-        Effect.provide(GermanLanguageLayer),
-      );
-      expect(rendered).toBe("Januar 2025");
+      const complete = yield* parseGerman("JANUAR   2025");
+      const open = yield* parseGerman("seit Januar 2025");
+      const renderedComplete = yield* formatNatural(complete.range, {
+        locale: "de",
+      }).pipe(Effect.provide(GermanLanguageLayer));
+      const renderedOpen = yield* formatNatural(open.range, {
+        locale: "de",
+      }).pipe(Effect.provide(GermanLanguageLayer));
+      expect(renderedComplete).toBe("Januar 2025");
+      expect(renderedOpen).toBe("seit Januar 2025");
     }),
   );
 

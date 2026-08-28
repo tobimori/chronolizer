@@ -247,9 +247,9 @@ const renderGerman = (range: DateRangeExpr) => {
     const year = date.slice(0, 4);
     const month = Number(date.slice(5, 7));
     const day = date.slice(8, 10);
-    periods.push(date);
     if (day === "01") periods.push(`${months[month - 1]} ${year}`);
     if (date.slice(5) === "01-01") periods.push(year);
+    periods.push(date);
   }
   const phrases = [
     ...unitPhrases.map((entry) => entry.toDate),
