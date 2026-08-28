@@ -1,6 +1,5 @@
 import { Effect, Option, String as EffectString } from "effect";
 
-import { boundedRange, greaterThanOrEqual, lessThan } from "../ast/constructors.ts";
 import { isIsoDate } from "../ast/schemas.ts";
 import type { DateRangeExpr, Unit } from "../ast/schemas.ts";
 import { BaseLanguageContribution } from "../language/model.ts";
@@ -8,20 +7,35 @@ import { defineLanguagePlugin, languagePluginsLayer } from "../language/registry
 import { correctWhitespaceSeparatedText } from "../natural/correction.ts";
 import { normalizeNaturalText } from "../natural/text.ts";
 import {
+  calendarPeriodOffset,
   candidate,
   datedPeriods,
+  datedQuarterPeriods,
   fixedDatePeriod,
   fixedMonthPeriod,
+  fixedQuarterPeriod,
   fixedYearPeriod,
+  fromNowRange,
+  futurePeriod,
+  futureRange,
+  isoDate,
+  joinedNowCandidate,
+  joinedPeriodCandidate,
   monthOfRelativeYear,
   openBoundaryCandidate,
   parseTrailingCount,
+  periodEndDay,
   periodRange,
+  periodStartDay,
   periodToDateRange,
+  quarterOfRelativeYear,
   relativePeriod,
+  relativeWeekend,
+  remainingPeriodRange,
   renderPeriodRange,
   trailingPeriod,
   trailingRange,
+  untilNowRange,
   validYear,
 } from "./shared.ts";
 import type { Period } from "./shared.ts";
@@ -41,6 +55,23 @@ const months = [
   "december",
 ] as const;
 
+const monthAbbreviations = [
+  ["jan"],
+  ["feb"],
+  ["mar"],
+  ["apr"],
+  ["may"],
+  ["jun"],
+  ["jul"],
+  ["aug"],
+  ["sep", "sept"],
+  ["oct"],
+  ["nov"],
+  ["dec"],
+] as const;
+
+const quarterNames = ["first", "second", "third", "fourth"] as const;
+
 const units = [
   ["day", "day", "days"],
   ["week", "week", "weeks"],
@@ -51,23 +82,151 @@ const units = [
 
 const title = (value: string) => `${value.slice(0, 1).toLocaleUpperCase("en")}${value.slice(1)}`;
 
+const currentPeriod = (unit: string) => (unit === "day" ? "today" : `this ${unit}`);
+
+const remainingPeriodPhrases = units.flatMap((entry) =>
+  [
+    `rest of the ${entry[0]}`,
+    `rest of ${entry[0]}`,
+    `rest of ${currentPeriod(entry[0])}`,
+    `remainder of the ${entry[0]}`,
+    `remaining ${entry[0]}`,
+  ].map((phrase) => ({ entry, phrase })),
+);
+
+const toDateAbbreviations = ["dtd", "wtd", "mtd", "qtd", "ytd"] as const;
+
+const toDatePhrases = units.flatMap((entry, index) =>
+  [
+    `${entry[0]} to date`,
+    `${entry[0]}-to-date`,
+    toDateAbbreviations[index],
+    `since the start of the ${entry[0]}`,
+    `since the beginning of the ${entry[0]}`,
+    `from the start of the ${entry[0]} to now`,
+    `from the beginning of the ${entry[0]} to now`,
+    `${currentPeriod(entry[0])} so far`,
+    `so far ${currentPeriod(entry[0])}`,
+    `${currentPeriod(entry[0])} until now`,
+    `${currentPeriod(entry[0])} up to now`,
+  ].map((phrase) => ({ entry, phrase })),
+);
+
 const monthNumber = (value: string) => {
-  const index = months.findIndex((month) => month === value);
+  const normalized = value.endsWith(".") ? value.slice(0, -1) : value;
+  const fullIndex = months.findIndex((month) => month === normalized);
+  if (fullIndex !== -1) return fullIndex + 1;
+  const shortIndex = monthAbbreviations.findIndex((aliases) =>
+    aliases.some((alias) => alias === normalized),
+  );
+  return shortIndex === -1 ? undefined : shortIndex + 1;
+};
+
+const relativeDirection = (value: string) => {
+  if (value === "last" || value === "previous") return -1;
+  if (value === "next" || value === "coming" || value === "upcoming") return 1;
+  return 0;
+};
+
+const relativeDirectionName = (direction: number) => {
+  if (direction < 0) return "last";
+  if (direction > 0) return "next";
+  return "this";
+};
+
+const quarterNumber = (value: string) => {
+  if (value.startsWith("q")) return Number(value.slice(1));
+  const index = quarterNames.findIndex((name) => name === value);
   return index === -1 ? undefined : index + 1;
 };
 
-const parsePeriod = (input: string) => {
+const parseQuarter = (input: string) => {
+  const fixed = EffectString.match(/^(q[1-4])(?: of)? (\d{4})$/u)(input);
+  const reversed = EffectString.match(/^(\d{4}) (q[1-4])$/u)(input);
+  const namedFixed = EffectString.match(/^(first|second|third|fourth) quarter(?: of)? (\d{4})$/u)(
+    input,
+  );
+  const relative = EffectString.match(/^(q[1-4])(?: of)? (last|this|next) year$/u)(input);
+  const namedRelative = EffectString.match(
+    /^(first|second|third|fourth) quarter(?: of)? (last|this|next) year$/u,
+  )(input);
+  const standalone = EffectString.match(/^(q[1-4])$/u)(input);
+  const namedStandalone = EffectString.match(/^(first|second|third|fourth) quarter$/u)(input);
+
+  if (Option.isSome(fixed) || Option.isSome(reversed) || Option.isSome(namedFixed)) {
+    const match = [fixed, reversed, namedFixed].find(Option.isSome)?.value;
+    if (match === undefined) return Option.none<Period>();
+    const quarterText = Option.isSome(reversed) ? match[2] : match[1];
+    const yearText = Option.isSome(reversed) ? match[1] : match[2];
+    const quarter = quarterNumber(quarterText);
+    const year = validYear(yearText);
+    if (quarter !== undefined && year !== undefined) {
+      return Option.some(fixedQuarterPeriod(year, quarter, `Q${quarter} ${year}`));
+    }
+  }
+
+  if (Option.isSome(relative) || Option.isSome(namedRelative)) {
+    const match = [relative, namedRelative].find(Option.isSome)?.value;
+    if (match === undefined) return Option.none<Period>();
+    const quarter = quarterNumber(match[1]);
+    if (quarter !== undefined) {
+      const direction = relativeDirection(match[2]);
+      return Option.some(
+        quarterOfRelativeYear(quarter, direction, `Q${quarter} of ${match[2]} year`),
+      );
+    }
+  }
+
+  const match = [standalone, namedStandalone].find(Option.isSome)?.value;
+  if (match === undefined) return Option.none<Period>();
+  const quarter = quarterNumber(match[1]);
+  return quarter === undefined
+    ? Option.none<Period>()
+    : Option.some(quarterOfRelativeYear(quarter, 0, `Q${quarter}`));
+};
+
+const namedDatePeriod = (yearText: string, monthText: string, dayText: string) => {
+  const year = validYear(yearText);
+  const month = monthNumber(monthText);
+  const day = Number(dayText);
+  if (year === undefined || month === undefined) return Option.none<Period>();
+  const value = isoDate(year, month, day);
+  if (!isIsoDate(value) || value === "9999-12-31") return Option.none<Period>();
+  return Option.some(fixedDatePeriod(value, `${day} ${title(months[month - 1])} ${year}`));
+};
+
+const parseNamedDate = (input: string) => {
+  const dayFirst = EffectString.match(/^([0-3]?\d)(?:st|nd|rd|th)? ([a-z]+\.?) (\d{4})$/u)(input);
+  if (Option.isSome(dayFirst)) {
+    return namedDatePeriod(dayFirst.value[3], dayFirst.value[2], dayFirst.value[1]);
+  }
+  const monthFirst = EffectString.match(/^([a-z]+\.?) ([0-3]?\d)(?:st|nd|rd|th)?,? (\d{4})$/u)(
+    input,
+  );
+  if (Option.isSome(monthFirst)) {
+    return namedDatePeriod(monthFirst.value[3], monthFirst.value[1], monthFirst.value[2]);
+  }
+  return Option.none<Period>();
+};
+
+const parseBasePeriod = (input: string) => {
   if (isIsoDate(input) && input !== "9999-12-31") {
     return Option.some(fixedDatePeriod(input, input));
   }
 
-  const yearMatch = EffectString.match(/^\d{4}$/u)(input);
+  const namedDate = parseNamedDate(input);
+  if (Option.isSome(namedDate)) return namedDate;
+
+  const quarter = parseQuarter(input);
+  if (Option.isSome(quarter)) return quarter;
+
+  const yearMatch = EffectString.match(/^(?:(?:the )?(?:calendar )?year )?(\d{4})$/u)(input);
   if (Option.isSome(yearMatch)) {
-    const year = validYear(yearMatch.value[0]);
+    const year = validYear(yearMatch.value[1]);
     if (year !== undefined) return Option.some(fixedYearPeriod(year, String(year)));
   }
 
-  const monthYear = EffectString.match(/^([a-z]+) (\d{4})$/u)(input);
+  const monthYear = EffectString.match(/^([a-z]+\.?) (\d{4})$/u)(input);
   if (Option.isSome(monthYear)) {
     const month = monthNumber(monthYear.value[1]);
     const year = validYear(monthYear.value[2]);
@@ -76,11 +235,10 @@ const parsePeriod = (input: string) => {
     }
   }
 
-  const relativeMonth = EffectString.match(/^([a-z]+) of (last|this|next) year$/u)(input);
+  const relativeMonth = EffectString.match(/^([a-z]+\.?) (?:of )?(last|this|next) year$/u)(input);
   if (Option.isSome(relativeMonth)) {
     const month = monthNumber(relativeMonth.value[1]);
-    const direction =
-      relativeMonth.value[2] === "last" ? -1 : relativeMonth.value[2] === "next" ? 1 : 0;
+    const direction = relativeDirection(relativeMonth.value[2]);
     if (month !== undefined) {
       return Option.some(
         monthOfRelativeYear(
@@ -104,14 +262,51 @@ const parsePeriod = (input: string) => {
   if (input === "tomorrow") {
     return Option.some(relativePeriod("day", 1, "tomorrow"));
   }
+  if (input === "weekend" || input === "the weekend" || input === "this weekend") {
+    return Option.some(relativeWeekend(0, "this weekend"));
+  }
+  if (input === "last weekend" || input === "previous weekend") {
+    return Option.some(relativeWeekend(-1, "last weekend"));
+  }
+  if (input === "next weekend" || input === "coming weekend") {
+    return Option.some(relativeWeekend(1, "next weekend"));
+  }
+  if (input === "the weekend before last") {
+    return Option.some(relativeWeekend(-2, "the weekend before last"));
+  }
+  if (input === "the weekend after next") {
+    return Option.some(relativeWeekend(2, "the weekend after next"));
+  }
 
-  const relative = EffectString.match(/^(last|this|next) ([a-z]+)$/u)(input);
+  const articlePeriod = EffectString.match(/^the (day|week|month|quarter|year)$/u)(input);
+  if (Option.isSome(articlePeriod)) {
+    const entry = units.find((unit) => unit[0] === articlePeriod.value[1]);
+    if (entry !== undefined) {
+      return Option.some(relativePeriod(entry[1], 0, currentPeriod(entry[0])));
+    }
+  }
+
+  const outerRelative = EffectString.match(
+    /^(?:the )?(day|week|month|quarter|year) (before last|after next)$/u,
+  )(input);
+  if (Option.isSome(outerRelative)) {
+    const entry = units.find((unit) => unit[0] === outerRelative.value[1]);
+    if (entry !== undefined) {
+      const direction = outerRelative.value[2] === "before last" ? -2 : 2;
+      return Option.some(relativePeriod(entry[1], direction, input));
+    }
+  }
+
+  const relative = EffectString.match(
+    /^(?:the )?(last|previous|this|current|next|coming|upcoming) ([a-z]+)$/u,
+  )(input);
   if (Option.isSome(relative)) {
     const unit = units.find((entry) => entry[0] === relative.value[2])?.[1];
     if (unit !== undefined) {
-      const direction = relative.value[1] === "last" ? -1 : relative.value[1] === "next" ? 1 : 0;
+      const direction = relativeDirection(relative.value[1]);
+      const canonicalDirection = relativeDirectionName(direction);
       return Option.some(
-        relativePeriod(unit, direction, `${relative.value[1]} ${relative.value[2]}`),
+        relativePeriod(unit, direction, `${canonicalDirection} ${relative.value[2]}`),
       );
     }
   }
@@ -119,67 +314,185 @@ const parsePeriod = (input: string) => {
   return Option.none<Period>();
 };
 
+const parsePeriod = (input: string) => {
+  const edge = EffectString.match(/^(?:the )?(start|beginning|end) of (.+)$/u)(input);
+  if (Option.isSome(edge)) {
+    const period = parseBasePeriod(edge.value[2]);
+    if (Option.isSome(period)) {
+      const name = edge.value[1] === "beginning" ? "start" : edge.value[1];
+      const canonical = `${name} of ${period.value.canonical}`;
+      return Option.some(
+        name === "end"
+          ? periodEndDay(period.value, canonical)
+          : periodStartDay(period.value, canonical),
+      );
+    }
+  }
+  const wrapper = ["during ", "in ", "for ", "all of ", "the whole of "].find((prefix) =>
+    input.startsWith(prefix),
+  );
+  return parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
+};
+
 const boundaryCandidate = (input: string) =>
   openBoundaryCandidate(
     input,
     [
-      ["since ", "since"],
-      ["before ", "before"],
+      ["up to and including ", "through"],
+      ["up to including ", "through"],
+      ["since the beginning of ", "since"],
+      ["since the start of ", "since"],
+      ["from the beginning of ", "since"],
+      ["from the start of ", "since"],
+      ["starting from ", "since"],
+      ["through the end of ", "through"],
+      ["until the end of ", "through"],
+      ["after the end of ", "after"],
+      ["until the start of ", "before"],
+      ["before the beginning of ", "before"],
+      ["before the start of ", "before"],
+      ["before beginning of ", "before"],
+      ["before start of ", "before"],
+      ["starting ", "since"],
       ["through ", "through"],
+      ["before ", "before"],
+      ["since ", "since"],
       ["after ", "after"],
+      ["until ", "before"],
+      ["till ", "before"],
+      ["up to ", "before"],
+      ["from ", "since"],
     ],
     parsePeriod,
   );
 
-const parseTrailingPeriod = (input: string) => {
-  const match = EffectString.match(
-    /^(?:(?:last|previous) )?([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years)$/u,
+const countedUnit = (value: string, amount: number) =>
+  units.find((entry) => value === (amount === 1 ? entry[0] : entry[2]));
+
+const parseCalendarOffset = (input: string) => {
+  const past = EffectString.match(
+    /^([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years) (?:ago|prior)$/u,
   )(input);
-  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
-  const amount = parseTrailingCount(match.value[1]);
-  const entry = units.find((unit) => unit[0] === match.value[2] || unit[2] === match.value[2]);
-  if (
-    Option.isNone(amount) ||
-    entry === undefined ||
-    (amount.value === 1 ? match.value[2] !== entry[0] : match.value[2] !== entry[2])
-  ) {
-    return Option.none<ReturnType<typeof candidate>>();
-  }
+  const futureIn = EffectString.match(
+    /^in ([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years)$/u,
+  )(input);
+  const futureFromNow = EffectString.match(
+    /^([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years) from now$/u,
+  )(input);
+  const match = [past, futureIn, futureFromNow].find(Option.isSome)?.value;
+  if (match === undefined) return Option.none<ReturnType<typeof candidate>>();
+  const amount = parseTrailingCount(match[1]);
+  if (Option.isNone(amount)) return Option.none<ReturnType<typeof candidate>>();
+  const entry = countedUnit(match[2], amount.value);
+  if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
+  const unitText = match[2];
+  const direction = Option.isSome(past) ? -amount.value : amount.value;
+  const canonical =
+    direction < 0 ? `${amount.value} ${unitText} ago` : `in ${amount.value} ${unitText}`;
   return Option.some(
-    candidate(
-      trailingRange(amount.value, entry[1]),
-      amount.value === 1 ? `1 ${entry[0]}` : `last ${amount.value} ${entry[2]}`,
-    ),
+    candidate(periodRange(relativePeriod(entry[1], direction, canonical)), canonical),
   );
 };
 
-const parseEnglish = (input: string) => {
-  const trailing = parseTrailingPeriod(input);
-  if (Option.isSome(trailing)) return trailing;
+const parseRollingPeriod = (input: string) => {
+  const past = EffectString.match(
+    /^(?:(?:last|previous|past) |(?:in|over) the (?:last|previous|past) )?([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years)$/u,
+  )(input);
+  const future = EffectString.match(
+    /^(?:(?:next|coming|within) |(?:in|over|within) the (?:next|coming) )([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years)$/u,
+  )(input);
+  const match = [past, future].find(Option.isSome)?.value;
+  if (match === undefined) return Option.none<ReturnType<typeof candidate>>();
+  const amount = parseTrailingCount(match[1]);
+  if (Option.isNone(amount)) return Option.none<ReturnType<typeof candidate>>();
+  const entry = countedUnit(match[2], amount.value);
+  if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
+  const isFuture = Option.isSome(future);
+  const range = isFuture
+    ? futureRange(amount.value, entry[1])
+    : trailingRange(amount.value, entry[1]);
+  const direction = isFuture ? "next" : "last";
+  const noun = amount.value === 1 ? entry[0] : entry[2];
+  return Option.some(candidate(range, `${direction} ${amount.value} ${noun}`));
+};
 
-  const toDate = units.find((entry) => `${entry[0]} to date` === input);
-  if (toDate !== undefined) {
-    return Option.some(candidate(periodToDateRange(toDate[1]), input));
+const parseEnglish = (input: string) => {
+  const remaining = remainingPeriodPhrases.find((entry) => entry.phrase === input);
+  if (remaining !== undefined) {
+    return Option.some(
+      candidate(remainingPeriodRange(remaining.entry[1]), `rest of ${remaining.entry[0]}`),
+    );
   }
+
+  if (["until now", "till now", "up to now", "through now"].includes(input)) {
+    return Option.some(candidate(untilNowRange(), "until now"));
+  }
+  if (["from now", "from now on", "starting now"].includes(input)) {
+    return Option.some(candidate(fromNowRange(), "from now"));
+  }
+
+  const offset = parseCalendarOffset(input);
+  if (Option.isSome(offset)) return offset;
+
+  const rolling = parseRollingPeriod(input);
+  if (Option.isSome(rolling)) return rolling;
+
+  const toDate = toDatePhrases.find((entry) => entry.phrase === input);
+  if (toDate !== undefined) {
+    return Option.some(candidate(periodToDateRange(toDate.entry[1]), `${toDate.entry[0]} to date`));
+  }
+
+  const nowBounded = joinedNowCandidate(
+    input,
+    [
+      ["from ", " to now"],
+      ["from ", " until now"],
+      ["from ", " through now"],
+      ["between ", " and now"],
+    ],
+    ["from now to ", "from now until ", "from now through ", "between now and "],
+    parsePeriod,
+    (period) => `from ${period} to now`,
+    (period) => `from now to ${period}`,
+  );
+  if (Option.isSome(nowBounded)) return nowBounded;
+
+  const bounded = joinedPeriodCandidate(
+    input,
+    [
+      ["from ", " to and including "],
+      ["from ", " through and including "],
+      ["from ", " to "],
+      ["from ", " until "],
+      ["from ", " through "],
+      ["from ", " till "],
+      ["between ", " and "],
+      ["between ", " through "],
+      ["", " to and including "],
+      ["", " through and including "],
+      ["", " to "],
+      ["", " until "],
+      ["", " through "],
+      ["", " till "],
+      ["", " - "],
+      ["", " – "],
+      ["", " — "],
+      ["between ", "-"],
+      ["", "-"],
+      ["between ", "–"],
+      ["", "–"],
+      ["between ", "—"],
+      ["", "—"],
+      ["between ", "~"],
+      ["", "~"],
+    ],
+    parsePeriod,
+    (lower, upper) => `from ${lower} to ${upper}`,
+  );
+  if (Option.isSome(bounded)) return bounded;
 
   const boundary = boundaryCandidate(input);
   if (Option.isSome(boundary)) return boundary;
-
-  if (input.startsWith("from ")) {
-    const separator = input.indexOf(" to ", 5);
-    if (separator !== -1) {
-      const lower = parsePeriod(input.slice(5, separator));
-      const upper = parsePeriod(input.slice(separator + 4));
-      if (Option.isSome(lower) && Option.isSome(upper)) {
-        return Option.some(
-          candidate(
-            boundedRange(greaterThanOrEqual(lower.value.start), lessThan(upper.value.end)),
-            `from ${lower.value.canonical} to ${upper.value.canonical}`,
-          ),
-        );
-      }
-    }
-  }
 
   return Option.map(parsePeriod(input), (period) =>
     candidate(periodRange(period), period.canonical),
@@ -187,6 +500,29 @@ const parseEnglish = (input: string) => {
 };
 
 const renderEnglish = (range: DateRangeExpr) => {
+  const offset = calendarPeriodOffset(range);
+  if (Option.isSome(offset) && Math.abs(offset.value.amount) > 1) {
+    const entry = units.find((unit) => unit[1] === offset.value.unit);
+    if (entry !== undefined) {
+      const noun = offset.value.amount === -1 || offset.value.amount === 1 ? entry[0] : entry[2];
+      return Option.some(
+        offset.value.amount < 0
+          ? `${-offset.value.amount} ${noun} ago`
+          : `in ${offset.value.amount} ${noun}`,
+      );
+    }
+  }
+
+  const future = futurePeriod(range);
+  if (Option.isSome(future)) {
+    const entry = units.find((unit) => unit[1] === future.value.unit);
+    if (entry !== undefined) {
+      return Option.some(
+        `next ${future.value.amount} ${future.value.amount === 1 ? entry[0] : entry[2]}`,
+      );
+    }
+  }
+
   const trailing = trailingPeriod(range);
   if (Option.isSome(trailing)) {
     const entry = units.find((unit) => unit[1] === trailing.value.unit);
@@ -201,13 +537,37 @@ const renderEnglish = (range: DateRangeExpr) => {
     "today",
     "yesterday",
     "tomorrow",
-    ...units.flatMap((entry) => [`this ${entry[0]}`, `last ${entry[0]}`, `next ${entry[0]}`]),
+    "this weekend",
+    "last weekend",
+    "next weekend",
+    "the weekend before last",
+    "the weekend after next",
+    ...units.flatMap((entry) => [
+      `this ${entry[0]}`,
+      `last ${entry[0]}`,
+      `next ${entry[0]}`,
+      `start of this ${entry[0]}`,
+      `end of this ${entry[0]}`,
+      `start of last ${entry[0]}`,
+      `end of last ${entry[0]}`,
+      `start of next ${entry[0]}`,
+      `end of next ${entry[0]}`,
+    ]),
+    ...[1, 2, 3, 4].flatMap((quarter) => [
+      `q${quarter}`,
+      `q${quarter} of last year`,
+      `q${quarter} of next year`,
+    ]),
     ...months.flatMap((month) => [month, `${month} of last year`, `${month} of next year`]),
     ...datedPeriods(range, months),
+    ...datedQuarterPeriods(range),
   ];
   return renderPeriodRange(
     range,
-    units.map((entry) => candidate(periodToDateRange(entry[1]), `${entry[0]} to date`)),
+    [
+      ...units.map((entry) => candidate(periodToDateRange(entry[1]), `${entry[0]} to date`)),
+      ...units.map((entry) => candidate(remainingPeriodRange(entry[1]), `rest of ${entry[0]}`)),
+    ],
     periods,
     parsePeriod,
     (period) => `since ${period}`,
@@ -215,6 +575,10 @@ const renderEnglish = (range: DateRangeExpr) => {
     (period) => `through ${period}`,
     (period) => `after ${period}`,
     (lower, upper) => `from ${lower} to ${upper}`,
+    (period) => `from ${period} to now`,
+    (period) => `from now to ${period}`,
+    () => "until now",
+    () => "from now",
   );
 };
 
@@ -222,21 +586,56 @@ export const EnglishContribution = new BaseLanguageContribution({
   locale: "en",
   vocabulary: [
     ...months,
+    ...quarterNames,
+    "q1",
+    "q2",
+    "q3",
+    "q4",
+    ...monthAbbreviations.flatMap((aliases) => aliases),
+    ...toDatePhrases.flatMap((entry) => entry.phrase.split(" ")),
+    ...remainingPeriodPhrases.flatMap((entry) => entry.phrase.split(" ")),
     ...units.flatMap((entry) => [entry[0], entry[2]]),
     "after",
+    "ago",
+    "all",
+    "and",
+    "beginning",
     "before",
+    "calendar",
+    "coming",
+    "current",
     "date",
+    "during",
+    "end",
+    "far",
+    "for",
     "from",
+    "in",
+    "including",
     "last",
     "next",
+    "now",
+    "on",
+    "over",
     "of",
+    "past",
     "previous",
+    "prior",
     "since",
+    "so",
+    "start",
+    "starting",
     "this",
     "through",
+    "till",
+    "whole",
     "to",
+    "until",
+    "upcoming",
+    "within",
     "today",
     "tomorrow",
+    "weekend",
     "yesterday",
   ],
   normalize: normalizeNaturalText,

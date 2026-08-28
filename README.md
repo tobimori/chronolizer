@@ -48,12 +48,32 @@ since January 2025              -> { gte: "2025-01-01" }
 before January 2025             -> { lt: "2025-01-01" }
 through January 2025            -> { lt: "2025-02-01" }
 last 3 months                   -> { gte: "now-3M", lte: "now" }
+30 months ago                   -> { gte: "now-30M/M", lt: "now-30M/M+1M" }
+01 January 2025 - 31 January 2025
+                                -> { gte: "2025-01-01", lt: "2025-02-01" }
+Q1 2025                         -> { gte: "2025-01-01", lt: "2025-04-01" }
 Januar letzten Jahres           -> { gte: "now-1y/y", lt: "now-1y/y+1M" }
 die letzten 3 Monate            -> { gte: "now-3M", lte: "now" }
+seit Jahresbeginn               -> { gte: "now/y", lte: "now" }
 seit Januar 2025                -> { gte: "2025-01-01" }
 ```
 
 Chronolizer parses the complete input. It does not extract a date phrase from a larger sentence.
+
+Supported families include named and abbreviated months, named dates, quarters, weekends, period starts and ends, past and future rolling windows, calendar offsets, open boundaries, `now`-bounded ranges, and explicit inclusive connectors. English and German use their own grammar and canonical forms.
+
+### Exclude positive relative ranges
+
+Set `allowFuture: false` to reject expressions whose relative range extends after `now`:
+
+```ts
+const program = parseNatural("next 3 months", {
+  locale: "en",
+  allowFuture: false,
+});
+```
+
+This option rejects relative forms such as `next month`, `this year`, and `in 3 years`. It does not classify fixed dates such as `January 2099`, because parsing does not read the clock.
 
 ## Filter to natural language
 

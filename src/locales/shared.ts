@@ -31,12 +31,44 @@ export const periodRange = (period: Period) =>
 export const periodToDateRange = (unit: Unit) =>
   boundedRange(greaterThanOrEqual(startOf(now(), unit)), lessThanOrEqual(now()));
 
+export const fromNowRange = () => lowerOpenRange(greaterThanOrEqual(now()));
+
+export const untilNowRange = () => upperOpenRange(lessThanOrEqual(now()));
+
+export const remainingPeriodRange = (unit: Unit) => {
+  const start = startOf(now(), unit);
+  return boundedRange(greaterThanOrEqual(now()), lessThan(shift(start, 1, unit)));
+};
+
+export const periodStartDay = (period: Period, canonical: string) =>
+  Period.make({ start: period.start, end: shift(period.start, 1, "day"), canonical });
+
+export const periodEndDay = (period: Period, canonical: string) =>
+  Period.make({ start: shift(period.end, -1, "day"), end: period.end, canonical });
+
+export const relativeWeekend = (direction: number, canonical: string) => {
+  const weekBase = direction === 0 ? now() : shift(now(), direction, "week");
+  const weekStart = startOf(weekBase, "week");
+  const start = shift(weekStart, 5, "day");
+  return Period.make({ start, end: shift(start, 2, "day"), canonical });
+};
+
 const TrailingCount = Schema.Int.check(
   Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
 );
 
 const TrailingPeriod = Schema.Struct({
   amount: TrailingCount,
+  unit: Unit,
+});
+
+const FuturePeriod = Schema.Struct({
+  amount: TrailingCount,
+  unit: Unit,
+});
+
+const CalendarPeriodOffset = Schema.Struct({
+  amount: Schema.Int,
   unit: Unit,
 });
 
@@ -52,6 +84,9 @@ export const parseTrailingCount = (value: string) => {
 
 export const trailingRange = (amount: number, unit: Unit) =>
   boundedRange(greaterThanOrEqual(shift(now(), -amount, unit)), lessThanOrEqual(now()));
+
+export const futureRange = (amount: number, unit: Unit) =>
+  boundedRange(greaterThanOrEqual(now()), lessThanOrEqual(shift(now(), amount, unit)));
 
 export const trailingPeriod = (range: DateRangeExpr) => {
   if (
@@ -72,7 +107,26 @@ export const trailingPeriod = (range: DateRangeExpr) => {
   );
 };
 
-export const relativePeriod = (unit: Unit, direction: -1 | 0 | 1, canonical: string) => {
+export const futurePeriod = (range: DateRangeExpr) => {
+  if (
+    range.lower?._tag !== "GreaterThanOrEqual" ||
+    range.upper?._tag !== "LessThanOrEqual" ||
+    range.lower.value._tag !== "Now" ||
+    range.upper.value._tag !== "Shift" ||
+    range.upper.value.amount <= 0 ||
+    range.upper.value.base._tag !== "Now"
+  ) {
+    return Option.none<typeof FuturePeriod.Type>();
+  }
+  return Option.some(
+    FuturePeriod.make({
+      amount: range.upper.value.amount,
+      unit: range.upper.value.unit,
+    }),
+  );
+};
+
+export const relativePeriod = (unit: Unit, direction: number, canonical: string) => {
   const base = direction === 0 ? now() : shift(now(), direction, unit);
   const start = startOf(base, unit);
   return Period.make({
@@ -127,6 +181,28 @@ export const fixedYearPeriod = (year: number, canonical: string) =>
     canonical,
   });
 
+export const fixedQuarterPeriod = (year: number, quarter: number, canonical: string) => {
+  const month = (quarter - 1) * 3 + 1;
+  const nextYear = quarter === 4 ? year + 1 : year;
+  const nextMonth = quarter === 4 ? 1 : month + 3;
+  return Period.make({
+    start: dateLiteral(isoDate(year, month, 1)),
+    end: dateLiteral(isoDate(nextYear, nextMonth, 1)),
+    canonical,
+  });
+};
+
+export const quarterOfRelativeYear = (quarter: number, direction: number, canonical: string) => {
+  const yearBase = direction === 0 ? now() : shift(now(), direction, "year");
+  const yearStart = startOf(yearBase, "year");
+  const start = quarter === 1 ? yearStart : shift(yearStart, (quarter - 1) * 3, "month");
+  return Period.make({
+    start,
+    end: shift(start, 1, "quarter"),
+    canonical,
+  });
+};
+
 export const monthOfRelativeYear = (month: number, direction: -1 | 0 | 1, canonical: string) => {
   const yearBase = direction === 0 ? now() : shift(now(), direction, "year");
   const yearStart = startOf(yearBase, "year");
@@ -138,33 +214,119 @@ export const monthOfRelativeYear = (month: number, direction: -1 | 0 | 1, canoni
   });
 };
 
+export const calendarPeriodOffset = (range: DateRangeExpr) => {
+  if (
+    range.lower?._tag !== "GreaterThanOrEqual" ||
+    range.upper?._tag !== "LessThan" ||
+    range.lower.value._tag !== "StartOf" ||
+    range.lower.value.base._tag !== "Shift" ||
+    range.lower.value.base.amount === 0 ||
+    range.lower.value.base.base._tag !== "Now" ||
+    range.lower.value.unit !== range.lower.value.base.unit ||
+    range.upper.value._tag !== "Shift" ||
+    range.upper.value.amount !== 1 ||
+    range.upper.value.unit !== range.lower.value.unit ||
+    formatInstantExpression(range.upper.value.base) !== formatInstantExpression(range.lower.value)
+  ) {
+    return Option.none<typeof CalendarPeriodOffset.Type>();
+  }
+  return Option.some(
+    CalendarPeriodOffset.make({
+      amount: range.lower.value.base.amount,
+      unit: range.lower.value.unit,
+    }),
+  );
+};
+
 export const candidate = (range: DateRangeExpr, canonical: string) =>
   NaturalCandidate.make({ range, canonical });
+
+export const joinedNowCandidate = (
+  input: string,
+  periodToNow: ReadonlyArray<readonly [prefix: string, suffix: string]>,
+  nowToPeriod: ReadonlyArray<string>,
+  parsePeriod: (input: string) => Option.Option<Period>,
+  canonicalToNow: (period: string) => string,
+  canonicalFromNow: (period: string) => string,
+) => {
+  for (const [prefix, suffix] of periodToNow) {
+    if (!input.startsWith(prefix) || !input.endsWith(suffix)) continue;
+    const period = parsePeriod(input.slice(prefix.length, -suffix.length));
+    if (Option.isNone(period)) continue;
+    return Option.some(
+      candidate(
+        boundedRange(greaterThanOrEqual(period.value.start), lessThanOrEqual(now())),
+        canonicalToNow(period.value.canonical),
+      ),
+    );
+  }
+  for (const prefix of nowToPeriod) {
+    if (!input.startsWith(prefix)) continue;
+    const period = parsePeriod(input.slice(prefix.length));
+    if (Option.isNone(period)) continue;
+    return Option.some(
+      candidate(
+        boundedRange(greaterThanOrEqual(now()), lessThan(period.value.end)),
+        canonicalFromNow(period.value.canonical),
+      ),
+    );
+  }
+  return Option.none<NaturalCandidate>();
+};
+
+export const joinedPeriodCandidate = (
+  input: string,
+  joins: ReadonlyArray<readonly [prefix: string, separator: string]>,
+  parsePeriod: (input: string) => Option.Option<Period>,
+  canonical: (lower: string, upper: string) => string,
+) => {
+  for (const [prefix, separator] of joins) {
+    if (!input.startsWith(prefix)) continue;
+    const separatorIndex = input.indexOf(separator, prefix.length);
+    if (separatorIndex === -1) continue;
+    const lower = parsePeriod(input.slice(prefix.length, separatorIndex));
+    const upper = parsePeriod(input.slice(separatorIndex + separator.length));
+    if (Option.isNone(lower) || Option.isNone(upper)) continue;
+    return Option.some(
+      candidate(
+        boundedRange(greaterThanOrEqual(lower.value.start), lessThan(upper.value.end)),
+        canonical(lower.value.canonical, upper.value.canonical),
+      ),
+    );
+  }
+  return Option.none<NaturalCandidate>();
+};
+
+export const periodBoundaryCandidate = (
+  period: Period,
+  boundary: "since" | "before" | "through" | "after",
+  canonical: string,
+) => {
+  switch (boundary) {
+    case "since":
+      return candidate(lowerOpenRange(greaterThanOrEqual(period.start)), canonical);
+    case "before":
+      return candidate(upperOpenRange(lessThan(period.start)), canonical);
+    case "through":
+      return candidate(upperOpenRange(lessThan(period.end)), canonical);
+    case "after":
+      return candidate(lowerOpenRange(greaterThanOrEqual(period.end)), canonical);
+  }
+};
 
 export const openBoundaryCandidate = (
   input: string,
   boundaries: ReadonlyArray<readonly [string, "since" | "before" | "through" | "after"]>,
   parsePeriod: (input: string) => Option.Option<Period>,
 ) => {
-  const boundary = boundaries.find((entry) => input.startsWith(entry[0]));
-  if (boundary === undefined) return Option.none<NaturalCandidate>();
-  const period = parsePeriod(input.slice(boundary[0].length));
-  if (Option.isNone(period)) return Option.none<NaturalCandidate>();
-  const canonical = `${boundary[0]}${period.value.canonical}`;
-  switch (boundary[1]) {
-    case "since":
-      return Option.some(
-        candidate(lowerOpenRange(greaterThanOrEqual(period.value.start)), canonical),
-      );
-    case "before":
-      return Option.some(candidate(upperOpenRange(lessThan(period.value.start)), canonical));
-    case "through":
-      return Option.some(candidate(upperOpenRange(lessThan(period.value.end)), canonical));
-    case "after":
-      return Option.some(
-        candidate(lowerOpenRange(greaterThanOrEqual(period.value.end)), canonical),
-      );
+  for (const boundary of boundaries) {
+    if (!input.startsWith(boundary[0])) continue;
+    const period = parsePeriod(input.slice(boundary[0].length));
+    if (Option.isNone(period)) continue;
+    const canonical = `${boundary[0]}${period.value.canonical}`;
+    return Option.some(periodBoundaryCandidate(period.value, boundary[1], canonical));
   }
+  return Option.none<NaturalCandidate>();
 };
 
 export const expressionDates = (range: DateRangeExpr) => {
@@ -177,6 +339,11 @@ export const expressionDates = (range: DateRangeExpr) => {
     if (Option.isSome(match)) dates.add(match.value[0]);
   }
   return [...dates];
+};
+
+export const datedQuarterPeriods = (range: DateRangeExpr) => {
+  const years = [...new Set(expressionDates(range).map((date) => date.slice(0, 4)))];
+  return years.flatMap((year) => [1, 2, 3, 4].map((quarter) => `q${quarter} ${year}`));
 };
 
 export const datedPeriods = (range: DateRangeExpr, months: ReadonlyArray<string>) => {
@@ -209,6 +376,10 @@ export const renderPeriodRange = (
   through: (period: string) => string,
   after: (period: string) => string,
   between: (lower: string, upper: string) => string,
+  toNow: (period: string) => string,
+  fromNow: (period: string) => string,
+  untilNow: () => string,
+  afterNow: () => string,
 ) => {
   const expected = rangeKey(range);
   for (const entry of toDate) {
@@ -219,6 +390,24 @@ export const renderPeriodRange = (
     Option.match(parsePeriod(phrase), { onNone: () => [], onSome: (period) => [period] }),
   );
   const filter = formatFilter(range);
+  if (filter.lte === "now" && filter.gt === undefined && filter.gte === undefined) {
+    return Option.some(untilNow());
+  }
+  if (filter.gte === "now" && filter.lt === undefined && filter.lte === undefined) {
+    return Option.some(afterNow());
+  }
+  if (filter.gte !== undefined && filter.lte === "now") {
+    const period = periods.find(
+      (candidate) => formatInstantExpression(candidate.start) === filter.gte,
+    );
+    if (period !== undefined) return Option.some(toNow(period.canonical));
+  }
+  if (filter.gte === "now" && filter.lt !== undefined) {
+    const period = periods.find(
+      (candidate) => formatInstantExpression(candidate.end) === filter.lt,
+    );
+    if (period !== undefined) return Option.some(fromNow(period.canonical));
+  }
   if (filter.gte !== undefined && filter.lt !== undefined) {
     const exact = periods.find(
       (period) =>
