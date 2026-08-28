@@ -131,6 +131,10 @@ describe("English date ranges", () => {
     ["1 day prior", "now-1d/d", "now-1d/d+1d", "yesterday"],
     ["in 2 weeks", "now+2w/w", "now+2w/w+1w", "in 2 weeks"],
     ["3 years from now", "now+3y/y", "now+3y/y+1y", "in 3 years"],
+    ["a month ago", "now-1M/M", "now-1M/M+1M", "last month"],
+    ["one week prior", "now-1w/w", "now-1w/w+1w", "last week"],
+    ["in a quarter", "now+1q/q", "now+1q/q+1q", "next quarter"],
+    ["one year from now", "now+1y/y", "now+1y/y+1y", "next year"],
   ] as const)(
     "maps calendar-offset period %s",
     Effect.fn(function* (testCase) {
@@ -522,12 +526,17 @@ describe("English date ranges", () => {
     "2025-02-29",
     "1900-02-29",
     "2025-04-31",
+    "31 February 2025",
+    "February 29 2025",
     "9999-12-31",
     "January 2025 extra",
     "past month",
     "0 months",
     "1 months",
     "2 month",
+    "1 months ago",
+    "2 month ago",
+    "Q5 2025",
     "show results since January 2025",
   ])(
     "rejects unsupported complete input %j",

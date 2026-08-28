@@ -12,7 +12,7 @@ import {
   startOf,
   upperOpenRange,
 } from "../ast/constructors.ts";
-import { daysInMonth, InstantExpr, Unit } from "../ast/schemas.ts";
+import { daysInMonth, InstantExpr, isIsoDate, Unit } from "../ast/schemas.ts";
 import type { DateRangeExpr } from "../ast/schemas.ts";
 import { formatFilter, rangeKey } from "../filter/codec.ts";
 import { formatInstantExpression } from "../filter/expression.ts";
@@ -162,6 +162,22 @@ export const fixedDatePeriod = (value: string, canonical: string) => {
     end: dateLiteral(nextDay(year, month, day)),
     canonical,
   });
+};
+
+export const namedDatePeriod = (
+  yearText: string,
+  monthText: string,
+  dayText: string,
+  monthNumber: (value: string) => number | undefined,
+  canonical: (day: number, month: number, year: number) => string,
+) => {
+  const year = validYear(yearText);
+  const month = monthNumber(monthText);
+  const day = Number(dayText);
+  if (year === undefined || month === undefined) return Option.none<Period>();
+  const value = isoDate(year, month, day);
+  if (!isIsoDate(value) || value === "9999-12-31") return Option.none<Period>();
+  return Option.some(fixedDatePeriod(value, canonical(day, month, year)));
 };
 
 export const fixedMonthPeriod = (year: number, month: number, canonical: string) => {
@@ -366,11 +382,18 @@ export const datedPeriods = (range: DateRangeExpr, months: ReadonlyArray<string>
   ];
 };
 
+export const periodsFromPhrases = (
+  phrases: ReadonlyArray<string>,
+  parsePeriod: (input: string) => Option.Option<Period>,
+) =>
+  phrases.flatMap((phrase) =>
+    Option.match(parsePeriod(phrase), { onNone: () => [], onSome: (period) => [period] }),
+  );
+
 export const renderPeriodRange = (
   range: DateRangeExpr,
   toDate: ReadonlyArray<NaturalCandidate>,
-  phrases: ReadonlyArray<string>,
-  parsePeriod: (input: string) => Option.Option<Period>,
+  periods: ReadonlyArray<Period>,
   since: (period: string) => string,
   before: (period: string) => string,
   through: (period: string) => string,
@@ -386,9 +409,6 @@ export const renderPeriodRange = (
     if (rangeKey(entry.range) === expected) return Option.some(entry.canonical);
   }
 
-  const periods = phrases.flatMap((phrase) =>
-    Option.match(parsePeriod(phrase), { onNone: () => [], onSome: (period) => [period] }),
-  );
   const filter = formatFilter(range);
   if (filter.lte === "now" && filter.gt === undefined && filter.gte === undefined) {
     return Option.some(untilNow());

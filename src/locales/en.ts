@@ -18,14 +18,15 @@ import {
   fromNowRange,
   futurePeriod,
   futureRange,
-  isoDate,
   joinedNowCandidate,
   joinedPeriodCandidate,
   monthOfRelativeYear,
+  namedDatePeriod,
   openBoundaryCandidate,
   parseTrailingCount,
   periodEndDay,
   periodRange,
+  periodsFromPhrases,
   periodStartDay,
   periodToDateRange,
   quarterOfRelativeYear,
@@ -185,26 +186,28 @@ const parseQuarter = (input: string) => {
     : Option.some(quarterOfRelativeYear(quarter, 0, `Q${quarter}`));
 };
 
-const namedDatePeriod = (yearText: string, monthText: string, dayText: string) => {
-  const year = validYear(yearText);
-  const month = monthNumber(monthText);
-  const day = Number(dayText);
-  if (year === undefined || month === undefined) return Option.none<Period>();
-  const value = isoDate(year, month, day);
-  if (!isIsoDate(value) || value === "9999-12-31") return Option.none<Period>();
-  return Option.some(fixedDatePeriod(value, `${day} ${title(months[month - 1])} ${year}`));
-};
-
 const parseNamedDate = (input: string) => {
   const dayFirst = EffectString.match(/^([0-3]?\d)(?:st|nd|rd|th)? ([a-z]+\.?) (\d{4})$/u)(input);
   if (Option.isSome(dayFirst)) {
-    return namedDatePeriod(dayFirst.value[3], dayFirst.value[2], dayFirst.value[1]);
+    return namedDatePeriod(
+      dayFirst.value[3],
+      dayFirst.value[2],
+      dayFirst.value[1],
+      monthNumber,
+      (day, month, year) => `${day} ${title(months[month - 1])} ${year}`,
+    );
   }
   const monthFirst = EffectString.match(/^([a-z]+\.?) ([0-3]?\d)(?:st|nd|rd|th)?,? (\d{4})$/u)(
     input,
   );
   if (Option.isSome(monthFirst)) {
-    return namedDatePeriod(monthFirst.value[3], monthFirst.value[1], monthFirst.value[2]);
+    return namedDatePeriod(
+      monthFirst.value[3],
+      monthFirst.value[1],
+      monthFirst.value[2],
+      monthNumber,
+      (day, month, year) => `${day} ${title(months[month - 1])} ${year}`,
+    );
   }
   return Option.none<Period>();
 };
@@ -370,6 +373,22 @@ const countedUnit = (value: string, amount: number) =>
   units.find((entry) => value === (amount === 1 ? entry[0] : entry[2]));
 
 const parseCalendarOffset = (input: string) => {
+  const singular = EffectString.match(
+    /^(?:(?:a|one) (day|week|month|quarter|year) (ago|prior|from now)|in (?:a|one) (day|week|month|quarter|year))$/u,
+  )(input);
+  if (Option.isSome(singular)) {
+    const unitText = singular.value[1] ?? singular.value[3];
+    const entry = units.find((unit) => unit[0] === unitText);
+    if (entry !== undefined) {
+      const isPast = singular.value[2] === "ago" || singular.value[2] === "prior";
+      const direction = isPast ? -1 : 1;
+      const canonical = isPast ? `1 ${entry[0]} ago` : `in 1 ${entry[0]}`;
+      return Option.some(
+        candidate(periodRange(relativePeriod(entry[1], direction, canonical)), canonical),
+      );
+    }
+  }
+
   const past = EffectString.match(
     /^([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years) (?:ago|prior)$/u,
   )(input);
@@ -499,6 +518,37 @@ const parseEnglish = (input: string) => {
   );
 };
 
+const staticPeriods = periodsFromPhrases(
+  [
+    "today",
+    "yesterday",
+    "tomorrow",
+    "this weekend",
+    "last weekend",
+    "next weekend",
+    "the weekend before last",
+    "the weekend after next",
+    ...units.flatMap((entry) => [
+      `this ${entry[0]}`,
+      `last ${entry[0]}`,
+      `next ${entry[0]}`,
+      `start of this ${entry[0]}`,
+      `end of this ${entry[0]}`,
+      `start of last ${entry[0]}`,
+      `end of last ${entry[0]}`,
+      `start of next ${entry[0]}`,
+      `end of next ${entry[0]}`,
+    ]),
+    ...[1, 2, 3, 4].flatMap((quarter) => [
+      `q${quarter}`,
+      `q${quarter} of last year`,
+      `q${quarter} of next year`,
+    ]),
+    ...months.flatMap((month) => [month, `${month} of last year`, `${month} of next year`]),
+  ],
+  parsePeriod,
+);
+
 const renderEnglish = (range: DateRangeExpr) => {
   const offset = calendarPeriodOffset(range);
   if (Option.isSome(offset) && Math.abs(offset.value.amount) > 1) {
@@ -534,33 +584,11 @@ const renderEnglish = (range: DateRangeExpr) => {
   }
 
   const periods = [
-    "today",
-    "yesterday",
-    "tomorrow",
-    "this weekend",
-    "last weekend",
-    "next weekend",
-    "the weekend before last",
-    "the weekend after next",
-    ...units.flatMap((entry) => [
-      `this ${entry[0]}`,
-      `last ${entry[0]}`,
-      `next ${entry[0]}`,
-      `start of this ${entry[0]}`,
-      `end of this ${entry[0]}`,
-      `start of last ${entry[0]}`,
-      `end of last ${entry[0]}`,
-      `start of next ${entry[0]}`,
-      `end of next ${entry[0]}`,
-    ]),
-    ...[1, 2, 3, 4].flatMap((quarter) => [
-      `q${quarter}`,
-      `q${quarter} of last year`,
-      `q${quarter} of next year`,
-    ]),
-    ...months.flatMap((month) => [month, `${month} of last year`, `${month} of next year`]),
-    ...datedPeriods(range, months),
-    ...datedQuarterPeriods(range),
+    ...staticPeriods,
+    ...periodsFromPhrases(
+      [...datedPeriods(range, months), ...datedQuarterPeriods(range)],
+      parsePeriod,
+    ),
   ];
   return renderPeriodRange(
     range,
@@ -569,7 +597,6 @@ const renderEnglish = (range: DateRangeExpr) => {
       ...units.map((entry) => candidate(remainingPeriodRange(entry[1]), `rest of ${entry[0]}`)),
     ],
     periods,
-    parsePeriod,
     (period) => `since ${period}`,
     (period) => `before ${period}`,
     (period) => `through ${period}`,
@@ -598,6 +625,7 @@ export const EnglishContribution = new BaseLanguageContribution({
     "after",
     "ago",
     "all",
+    "one",
     "and",
     "beginning",
     "before",

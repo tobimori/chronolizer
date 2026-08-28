@@ -48,6 +48,7 @@ const replacementsFor = (word: string, vocabulary: ReadonlyArray<string>) => {
   if (isProtectedToken(word)) return [];
   const maximum = word.length >= 6 ? 2 : 1;
   const matches = vocabulary
+    .filter((candidate) => Math.abs(candidate.length - word.length) <= maximum)
     .map((candidate) => ({
       word: candidate,
       distance: damerauLevenshtein(word, candidate),

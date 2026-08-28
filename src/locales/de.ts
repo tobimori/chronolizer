@@ -22,11 +22,13 @@ import {
   joinedNowCandidate,
   joinedPeriodCandidate,
   monthOfRelativeYear,
+  namedDatePeriod,
   openBoundaryCandidate,
   parseTrailingCount,
   periodBoundaryCandidate,
   periodEndDay,
   periodRange,
+  periodsFromPhrases,
   periodStartDay,
   periodToDateRange,
   quarterOfRelativeYear,
@@ -252,20 +254,16 @@ const monthNumber = (value: string) => {
   return shortIndex === -1 ? undefined : shortIndex + 1;
 };
 
-const namedDatePeriod = (yearText: string, monthText: string, dayText: string) => {
-  const year = validYear(yearText);
-  const month = monthNumber(monthText);
-  const day = Number(dayText);
-  if (year === undefined || month === undefined) return Option.none<Period>();
-  const value = isoDate(year, month, day);
-  if (!isIsoDate(value) || value === "9999-12-31") return Option.none<Period>();
-  return Option.some(fixedDatePeriod(value, `${day}. ${title(months[month - 1])} ${year}`));
-};
-
 const parseNamedDate = (input: string) => {
   const named = EffectString.match(/^([0-3]?\d)\.? ([a-zäöüß]+\.?) (\d{4})$/u)(input);
   if (Option.isSome(named)) {
-    return namedDatePeriod(named.value[3], named.value[2], named.value[1]);
+    return namedDatePeriod(
+      named.value[3],
+      named.value[2],
+      named.value[1],
+      monthNumber,
+      (day, month, year) => `${day}. ${title(months[month - 1])} ${year}`,
+    );
   }
   const numeric = EffectString.match(/^([0-3]?\d)\.([01]?\d)\.(\d{4})$/u)(input);
   if (Option.isSome(numeric)) {
@@ -633,6 +631,34 @@ const parseGerman = (input: string) => {
   );
 };
 
+const staticPeriods = periodsFromPhrases(
+  [
+    "dieses wochenende",
+    "letztes wochenende",
+    "nächstes wochenende",
+    "vorletztes wochenende",
+    "übernächstes wochenende",
+    ...unitPhrases.flatMap((entry) => [
+      entry.current,
+      entry.previous,
+      entry.next,
+      `anfang ${entry.current}`,
+      `ende ${entry.current}`,
+      `anfang ${entry.previous}`,
+      `ende ${entry.previous}`,
+      `anfang ${entry.next}`,
+      `ende ${entry.next}`,
+    ]),
+    ...[1, 2, 3, 4].flatMap((quarter) => [
+      `q${quarter}`,
+      `q${quarter} letzten jahres`,
+      `q${quarter} nächsten jahres`,
+    ]),
+    ...months.flatMap((month) => [month, `${month} letzten jahres`, `${month} nächsten jahres`]),
+  ],
+  parsePeriod,
+);
+
 const renderGerman = (range: DateRangeExpr) => {
   const offset = calendarPeriodOffset(range);
   if (Option.isSome(offset) && Math.abs(offset.value.amount) > 1) {
@@ -671,30 +697,11 @@ const renderGerman = (range: DateRangeExpr) => {
   }
 
   const periods = [
-    "dieses wochenende",
-    "letztes wochenende",
-    "nächstes wochenende",
-    "vorletztes wochenende",
-    "übernächstes wochenende",
-    ...unitPhrases.flatMap((entry) => [
-      entry.current,
-      entry.previous,
-      entry.next,
-      `anfang ${entry.current}`,
-      `ende ${entry.current}`,
-      `anfang ${entry.previous}`,
-      `ende ${entry.previous}`,
-      `anfang ${entry.next}`,
-      `ende ${entry.next}`,
-    ]),
-    ...[1, 2, 3, 4].flatMap((quarter) => [
-      `q${quarter}`,
-      `q${quarter} letzten jahres`,
-      `q${quarter} nächsten jahres`,
-    ]),
-    ...months.flatMap((month) => [month, `${month} letzten jahres`, `${month} nächsten jahres`]),
-    ...datedPeriods(range, months),
-    ...datedQuarterPeriods(range),
+    ...staticPeriods,
+    ...periodsFromPhrases(
+      [...datedPeriods(range, months), ...datedQuarterPeriods(range)],
+      parsePeriod,
+    ),
   ];
   return renderPeriodRange(
     range,
@@ -707,7 +714,6 @@ const renderGerman = (range: DateRangeExpr) => {
       ),
     ],
     periods,
-    parsePeriod,
     (period) => `seit ${period}`,
     (period) => `vor ${period}`,
     (period) => `bis einschließlich ${period}`,
