@@ -11,6 +11,7 @@ export default defineConfig({
       "locales/de": "src/locales/de.ts",
       "locales/es": "src/locales/es.ts",
       "locales/fr": "src/locales/fr.ts",
+      "locales/nl": "src/locales/nl.ts",
       "locales/default": "src/locales/default.ts",
     },
     dts: {
