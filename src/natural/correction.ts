@@ -16,31 +16,33 @@ const isProtectedToken = (word: string) =>
   word.length <= 3;
 
 export const damerauLevenshteinDistance = (left: string, right: string) => {
-  const rows = left.length + 1;
-  const columns = right.length + 1;
-  const matrix = Array.from({ length: rows }, () => Array<number>(columns).fill(0));
-  for (let row = 0; row < rows; row += 1) matrix[row][0] = row;
-  for (let column = 0; column < columns; column += 1) matrix[0][column] = column;
+  const fallback = left.length + right.length;
+  let previousPrevious: ReadonlyArray<number> | undefined;
+  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
 
-  for (let row = 1; row < rows; row += 1) {
-    for (let column = 1; column < columns; column += 1) {
-      const substitution = left[row - 1] === right[column - 1] ? 0 : 1;
-      matrix[row][column] = Math.min(
-        matrix[row - 1][column] + 1,
-        matrix[row][column - 1] + 1,
-        matrix[row - 1][column - 1] + substitution,
+  for (let row = 1; row <= left.length; row += 1) {
+    const current = [row];
+    for (let column = 1; column <= right.length; column += 1) {
+      const substitution = left.charAt(row - 1) === right.charAt(column - 1) ? 0 : 1;
+      const distance = Math.min(
+        (previous[column] ?? fallback) + 1,
+        (current[column - 1] ?? fallback) + 1,
+        (previous[column - 1] ?? fallback) + substitution,
       );
-      if (
+      const transposed =
+        previousPrevious !== undefined &&
         row > 1 &&
         column > 1 &&
-        left[row - 1] === right[column - 2] &&
-        left[row - 2] === right[column - 1]
-      ) {
-        matrix[row][column] = Math.min(matrix[row][column], matrix[row - 2][column - 2] + 1);
-      }
+        left.charAt(row - 1) === right.charAt(column - 2) &&
+        left.charAt(row - 2) === right.charAt(column - 1)
+          ? (previousPrevious[column - 2] ?? fallback) + 1
+          : fallback;
+      current.push(Math.min(distance, transposed));
     }
+    previousPrevious = previous;
+    previous = current;
   }
-  return matrix[left.length][right.length];
+  return previous[right.length] ?? fallback;
 };
 
 const replacementsFor = (word: string, vocabulary: ReadonlyArray<string>) => {

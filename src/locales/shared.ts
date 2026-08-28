@@ -18,6 +18,9 @@ import { formatFilter, rangeKey } from "../filter/codec.ts";
 import { formatInstantExpression } from "../filter/expression.ts";
 import { NaturalCandidate } from "../language/model.ts";
 
+export const textAt = (values: ReadonlyArray<string | undefined>, index: number) =>
+  values[index] ?? "";
+
 export const Period = Schema.Struct({
   start: InstantExpr,
   end: InstantExpr,
@@ -385,10 +388,7 @@ export const datedPeriods = (range: DateRangeExpr, months: ReadonlyArray<string>
 export const periodsFromPhrases = (
   phrases: ReadonlyArray<string>,
   parsePeriod: (input: string) => Option.Option<Period>,
-) =>
-  phrases.flatMap((phrase) =>
-    Option.match(parsePeriod(phrase), { onNone: () => [], onSome: (period) => [period] }),
-  );
+) => phrases.flatMap((phrase) => Option.toArray(parsePeriod(phrase)));
 
 export const renderPeriodRange = (
   range: DateRangeExpr,
@@ -410,6 +410,11 @@ export const renderPeriodRange = (
   }
 
   const filter = formatFilter(range);
+  const startsAt = (expression: string) =>
+    periods.find((period) => formatInstantExpression(period.start) === expression);
+  const endsAt = (expression: string) =>
+    periods.find((period) => formatInstantExpression(period.end) === expression);
+
   if (filter.lte === "now" && filter.gt === undefined && filter.gte === undefined) {
     return Option.some(untilNow());
   }
@@ -417,15 +422,11 @@ export const renderPeriodRange = (
     return Option.some(afterNow());
   }
   if (filter.gte !== undefined && filter.lte === "now") {
-    const period = periods.find(
-      (candidate) => formatInstantExpression(candidate.start) === filter.gte,
-    );
+    const period = startsAt(filter.gte);
     if (period !== undefined) return Option.some(toNow(period.canonical));
   }
   if (filter.gte === "now" && filter.lt !== undefined) {
-    const period = periods.find(
-      (candidate) => formatInstantExpression(candidate.end) === filter.lt,
-    );
+    const period = endsAt(filter.lt);
     if (period !== undefined) return Option.some(fromNow(period.canonical));
   }
   if (filter.gte !== undefined && filter.lt !== undefined) {
@@ -435,35 +436,23 @@ export const renderPeriodRange = (
         formatInstantExpression(period.end) === filter.lt,
     );
     if (exact !== undefined) return Option.some(exact.canonical);
-    const lower = periods.find(
-      (period) => formatInstantExpression(period.start) === filter.gte,
-    )?.canonical;
-    const upper = periods.find(
-      (period) => formatInstantExpression(period.end) === filter.lt,
-    )?.canonical;
+    const lower = startsAt(filter.gte)?.canonical;
+    const upper = endsAt(filter.lt)?.canonical;
     return lower === undefined || upper === undefined
       ? Option.none<string>()
       : Option.some(between(lower, upper));
   }
   if (filter.gte !== undefined && filter.lt === undefined && filter.lte === undefined) {
-    for (const period of periods) {
-      if (formatInstantExpression(period.start) === filter.gte) {
-        return Option.some(since(period.canonical));
-      }
-      if (formatInstantExpression(period.end) === filter.gte) {
-        return Option.some(after(period.canonical));
-      }
-    }
+    const start = startsAt(filter.gte);
+    if (start !== undefined) return Option.some(since(start.canonical));
+    const end = endsAt(filter.gte);
+    if (end !== undefined) return Option.some(after(end.canonical));
   }
   if (filter.lt !== undefined && filter.gt === undefined && filter.gte === undefined) {
-    for (const period of periods) {
-      if (formatInstantExpression(period.start) === filter.lt) {
-        return Option.some(before(period.canonical));
-      }
-      if (formatInstantExpression(period.end) === filter.lt) {
-        return Option.some(through(period.canonical));
-      }
-    }
+    const start = startsAt(filter.lt);
+    if (start !== undefined) return Option.some(before(start.canonical));
+    const end = endsAt(filter.lt);
+    if (end !== undefined) return Option.some(through(end.canonical));
   }
   return Option.none<string>();
 };

@@ -53,12 +53,10 @@ export class BaseLanguageContribution extends Data.TaggedClass("BaseLanguage")<{
   readonly locale: string;
   readonly vocabulary: ReadonlyArray<string>;
   readonly normalize?: (input: string, locale: string) => string;
-  readonly correct:
-    | ((
-        input: string,
-        vocabulary: ReadonlyArray<string>,
-      ) => ReadonlyArray<NaturalCorrectionCandidate>)
-    | undefined;
+  readonly correct?: (
+    input: string,
+    vocabulary: ReadonlyArray<string>,
+  ) => ReadonlyArray<NaturalCorrectionCandidate>;
   readonly parseExact: (input: string) => Option.Option<NaturalCandidate>;
   readonly suggest?: (input: string, limit: number) => ReadonlyArray<string>;
   readonly render: (range: DateRangeExprType) => Option.Option<string>;

@@ -42,6 +42,7 @@ import {
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
+  textAt,
   trailingPeriod,
   trailingRange,
   untilNowRange,
@@ -264,22 +265,24 @@ const parseNamedDate = (input: string) => {
   const named = EffectString.match(/^([0-3]?\d)\.? ([a-zäöüß]+\.?) (\d{4})$/u)(input);
   if (Option.isSome(named)) {
     return namedDatePeriod(
-      named.value[3],
-      named.value[2],
-      named.value[1],
+      textAt(named.value, 3),
+      textAt(named.value, 2),
+      textAt(named.value, 1),
       monthNumber,
-      (day, month, year) => `${day}. ${title(months[month - 1])} ${year}`,
+      (day, month, year) => `${day}. ${title(textAt(months, month - 1))} ${year}`,
     );
   }
   const numeric = EffectString.match(/^([0-3]?\d)\.([01]?\d)\.(\d{4})$/u)(input);
   if (Option.isSome(numeric)) {
-    const year = validYear(numeric.value[3]);
-    const day = Number(numeric.value[1]);
-    const month = Number(numeric.value[2]);
+    const year = validYear(textAt(numeric.value, 3));
+    const day = Number(textAt(numeric.value, 1));
+    const month = Number(textAt(numeric.value, 2));
     if (year !== undefined && month >= 1 && month <= 12) {
       const value = isoDate(year, month, day);
       if (isIsoDate(value) && value !== "9999-12-31") {
-        return Option.some(fixedDatePeriod(value, `${day}. ${title(months[month - 1])} ${year}`));
+        return Option.some(
+          fixedDatePeriod(value, `${day}. ${title(textAt(months, month - 1))} ${year}`),
+        );
       }
     }
   }
@@ -313,11 +316,10 @@ const parseQuarter = (input: string) => {
     /^(q[1-4]|[1-4]\.|erstes|zweites|drittes|viertes)(?: quartal)?$/u,
   )(input);
 
-  if (Option.isSome(fixed) || Option.isSome(reversed)) {
-    const match = [fixed, reversed].find(Option.isSome)?.value;
-    if (match === undefined) return Option.none<Period>();
-    const quarterText = Option.isSome(reversed) ? match[2] : match[1];
-    const yearText = Option.isSome(reversed) ? match[1] : match[2];
+  const fixedMatch = Option.firstSomeOf([fixed, reversed]);
+  if (Option.isSome(fixedMatch)) {
+    const quarterText = textAt(fixedMatch.value, Option.isSome(reversed) ? 2 : 1);
+    const yearText = textAt(fixedMatch.value, Option.isSome(reversed) ? 1 : 2);
     const quarter = quarterNumber(quarterText);
     const year = validYear(yearText);
     if (quarter !== undefined && year !== undefined) {
@@ -326,17 +328,18 @@ const parseQuarter = (input: string) => {
   }
 
   if (Option.isSome(relative)) {
-    const quarter = quarterNumber(relative.value[1]);
+    const directionText = textAt(relative.value, 2);
+    const quarter = quarterNumber(textAt(relative.value, 1));
     if (quarter !== undefined) {
-      const direction = relativeDirection(relative.value[2]);
+      const direction = relativeDirection(directionText);
       return Option.some(
-        quarterOfRelativeYear(quarter, direction, `Q${quarter} ${relative.value[2]} Jahres`),
+        quarterOfRelativeYear(quarter, direction, `Q${quarter} ${directionText} Jahres`),
       );
     }
   }
 
   if (Option.isNone(standalone)) return Option.none<Period>();
-  const quarter = quarterNumber(standalone.value[1]);
+  const quarter = quarterNumber(textAt(standalone.value, 1));
   return quarter === undefined
     ? Option.none<Period>()
     : Option.some(quarterOfRelativeYear(quarter, 0, `Q${quarter}`));
@@ -355,16 +358,18 @@ const parseBasePeriod = (input: string) => {
 
   const yearMatch = EffectString.match(/^(?:(?:das )?(?:kalender)?jahr )?(\d{4})$/u)(input);
   if (Option.isSome(yearMatch)) {
-    const year = validYear(yearMatch.value[1]);
+    const year = validYear(textAt(yearMatch.value, 1));
     if (year !== undefined) return Option.some(fixedYearPeriod(year, String(year)));
   }
 
   const monthYear = EffectString.match(/^([a-zäöüß]+\.?) (\d{4})$/u)(input);
   if (Option.isSome(monthYear)) {
-    const month = monthNumber(monthYear.value[1]);
-    const year = validYear(monthYear.value[2]);
+    const month = monthNumber(textAt(monthYear.value, 1));
+    const year = validYear(textAt(monthYear.value, 2));
     if (month !== undefined && year !== undefined) {
-      return Option.some(fixedMonthPeriod(year, month, `${title(months[month - 1])} ${year}`));
+      return Option.some(
+        fixedMonthPeriod(year, month, `${title(textAt(months, month - 1))} ${year}`),
+      );
     }
   }
 
@@ -372,14 +377,15 @@ const parseBasePeriod = (input: string) => {
     input,
   );
   if (Option.isSome(relativeMonth)) {
-    const month = monthNumber(relativeMonth.value[1]);
-    const direction = relativeDirection(relativeMonth.value[2]);
+    const directionText = textAt(relativeMonth.value, 2);
+    const month = monthNumber(textAt(relativeMonth.value, 1));
+    const direction = relativeDirection(directionText);
     if (month !== undefined) {
       return Option.some(
         monthOfRelativeYear(
           month,
           direction,
-          `${title(months[month - 1])} ${relativeMonth.value[2]} Jahres`,
+          `${title(textAt(months, month - 1))} ${directionText} Jahres`,
         ),
       );
     }
@@ -387,7 +393,9 @@ const parseBasePeriod = (input: string) => {
 
   const standaloneMonth = monthNumber(input);
   if (standaloneMonth !== undefined) {
-    return Option.some(monthOfRelativeYear(standaloneMonth, 0, title(months[standaloneMonth - 1])));
+    return Option.some(
+      monthOfRelativeYear(standaloneMonth, 0, title(textAt(months, standaloneMonth - 1))),
+    );
   }
 
   if (input === "wochenende" || input === "dieses wochenende" || input === "am wochenende") {
@@ -427,12 +435,13 @@ const parseBasePeriod = (input: string) => {
 const parsePeriod = (input: string) => {
   const edge = EffectString.match(/^(anfang|beginn|ende) (.+)$/u)(input);
   if (Option.isSome(edge)) {
-    const period = parseBasePeriod(edge.value[2]);
+    const edgeName = textAt(edge.value, 1);
+    const period = parseBasePeriod(textAt(edge.value, 2));
     if (Option.isSome(period)) {
-      const name = edge.value[1] === "ende" ? "Ende" : "Anfang";
+      const name = edgeName === "ende" ? "Ende" : "Anfang";
       const canonical = `${name} ${period.value.canonical}`;
       return Option.some(
-        edge.value[1] === "ende"
+        edgeName === "ende"
           ? periodEndDay(period.value, canonical)
           : periodStartDay(period.value, canonical),
       );
@@ -496,15 +505,16 @@ const parseCalendarOffset = (input: string) => {
   const prior = EffectString.match(
     /^([1-9]\d*) (tag|tage|woche|wochen|monat|monate|quartal|quartale|jahr|jahre) zuvor$/u,
   )(input);
-  const match = [prefixed, prior].find(Option.isSome)?.value;
-  if (match === undefined) return Option.none<ReturnType<typeof candidate>>();
-  const amountText = Option.isSome(prefixed) ? match[2] : match[1];
-  const unitText = Option.isSome(prefixed) ? match[3] : match[2];
+  const match = Option.firstSomeOf([prefixed, prior]);
+  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  const amountText = textAt(match.value, Option.isSome(prefixed) ? 2 : 1);
+  const unitText = textAt(match.value, Option.isSome(prefixed) ? 3 : 2);
   const amount = parseTrailingCount(amountText);
   if (Option.isNone(amount)) return Option.none<ReturnType<typeof candidate>>();
   const entry = countedUnit(unitText, amount.value, Option.isSome(prefixed));
   if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
-  const isPast = Option.isSome(prior) || (Option.isSome(prefixed) && match[1] === "vor");
+  const isPast =
+    Option.isSome(prior) || (Option.isSome(prefixed) && textAt(match.value, 1) === "vor");
   const direction = isPast ? -amount.value : amount.value;
   const directionName = isPast ? "vor" : "in";
   const noun = amount.value === 1 ? entry.noun : entry.dative;
@@ -533,14 +543,19 @@ const parseRollingPeriod = (input: string) => {
   const futureGenitive = EffectString.match(
     /^innerhalb der nächsten ([1-9]\d*) (tag|tage|woche|wochen|monat|monate|quartal|quartale|jahr|jahre)$/u,
   )(input);
-  const match = [past, pastDative, pastGenitive, future, futureDative, futureGenitive].find(
-    Option.isSome,
-  )?.value;
-  if (match === undefined) return Option.none<ReturnType<typeof candidate>>();
-  const amount = parseTrailingCount(match[1]);
+  const match = Option.firstSomeOf([
+    past,
+    pastDative,
+    pastGenitive,
+    future,
+    futureDative,
+    futureGenitive,
+  ]);
+  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  const amount = parseTrailingCount(textAt(match.value, 1));
   if (Option.isNone(amount)) return Option.none<ReturnType<typeof candidate>>();
   const usesDative = Option.isSome(pastDative) || Option.isSome(futureDative);
-  const entry = countedUnit(match[2], amount.value, usesDative);
+  const entry = countedUnit(textAt(match.value, 2), amount.value, usesDative);
   if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
   const isFuture =
     Option.isSome(future) || Option.isSome(futureDative) || Option.isSome(futureGenitive);

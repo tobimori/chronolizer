@@ -36,8 +36,7 @@ const parseUpper = (filter: DateFilter) => {
 };
 
 export const parseFilter = Effect.fn("chronolizer.parseFilter")(function* (filter: DateFilter) {
-  const lower = yield* parseLower(filter);
-  const upper = yield* parseUpper(filter);
+  const [lower, upper] = yield* Effect.all([parseLower(filter), parseUpper(filter)]);
   if (lower !== undefined && upper !== undefined) {
     return normalizeRange(boundedRange(lower, upper));
   }

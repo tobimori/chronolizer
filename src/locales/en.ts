@@ -40,6 +40,7 @@ import {
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
+  textAt,
   trailingPeriod,
   trailingRange,
   untilNowRange,
@@ -107,7 +108,7 @@ const toDatePhrases = units.flatMap((entry, index) =>
   [
     `${entry[0]} to date`,
     `${entry[0]}-to-date`,
-    toDateAbbreviations[index],
+    toDateAbbreviations[index] ?? "",
     `since the start of the ${entry[0]}`,
     `since the beginning of the ${entry[0]}`,
     `from the start of the ${entry[0]} to now`,
@@ -160,11 +161,10 @@ const parseQuarter = (input: string) => {
   const standalone = EffectString.match(/^(q[1-4])$/u)(input);
   const namedStandalone = EffectString.match(/^(first|second|third|fourth) quarter$/u)(input);
 
-  if (Option.isSome(fixed) || Option.isSome(reversed) || Option.isSome(namedFixed)) {
-    const match = [fixed, reversed, namedFixed].find(Option.isSome)?.value;
-    if (match === undefined) return Option.none<Period>();
-    const quarterText = Option.isSome(reversed) ? match[2] : match[1];
-    const yearText = Option.isSome(reversed) ? match[1] : match[2];
+  const fixedMatch = Option.firstSomeOf([fixed, reversed, namedFixed]);
+  if (Option.isSome(fixedMatch)) {
+    const quarterText = textAt(fixedMatch.value, Option.isSome(reversed) ? 2 : 1);
+    const yearText = textAt(fixedMatch.value, Option.isSome(reversed) ? 1 : 2);
     const quarter = quarterNumber(quarterText);
     const year = validYear(yearText);
     if (quarter !== undefined && year !== undefined) {
@@ -172,21 +172,21 @@ const parseQuarter = (input: string) => {
     }
   }
 
-  if (Option.isSome(relative) || Option.isSome(namedRelative)) {
-    const match = [relative, namedRelative].find(Option.isSome)?.value;
-    if (match === undefined) return Option.none<Period>();
-    const quarter = quarterNumber(match[1]);
+  const relativeMatch = Option.firstSomeOf([relative, namedRelative]);
+  if (Option.isSome(relativeMatch)) {
+    const directionText = textAt(relativeMatch.value, 2);
+    const quarter = quarterNumber(textAt(relativeMatch.value, 1));
     if (quarter !== undefined) {
-      const direction = relativeDirection(match[2]);
+      const direction = relativeDirection(directionText);
       return Option.some(
-        quarterOfRelativeYear(quarter, direction, `Q${quarter} of ${match[2]} year`),
+        quarterOfRelativeYear(quarter, direction, `Q${quarter} of ${directionText} year`),
       );
     }
   }
 
-  const match = [standalone, namedStandalone].find(Option.isSome)?.value;
-  if (match === undefined) return Option.none<Period>();
-  const quarter = quarterNumber(match[1]);
+  const standaloneMatch = Option.firstSomeOf([standalone, namedStandalone]);
+  if (Option.isNone(standaloneMatch)) return Option.none<Period>();
+  const quarter = quarterNumber(textAt(standaloneMatch.value, 1));
   return quarter === undefined
     ? Option.none<Period>()
     : Option.some(quarterOfRelativeYear(quarter, 0, `Q${quarter}`));
@@ -196,11 +196,11 @@ const parseNamedDate = (input: string) => {
   const dayFirst = EffectString.match(/^([0-3]?\d)(?:st|nd|rd|th)? ([a-z]+\.?) (\d{4})$/u)(input);
   if (Option.isSome(dayFirst)) {
     return namedDatePeriod(
-      dayFirst.value[3],
-      dayFirst.value[2],
-      dayFirst.value[1],
+      textAt(dayFirst.value, 3),
+      textAt(dayFirst.value, 2),
+      textAt(dayFirst.value, 1),
       monthNumber,
-      (day, month, year) => `${day} ${title(months[month - 1])} ${year}`,
+      (day, month, year) => `${day} ${title(textAt(months, month - 1))} ${year}`,
     );
   }
   const monthFirst = EffectString.match(/^([a-z]+\.?) ([0-3]?\d)(?:st|nd|rd|th)?,? (\d{4})$/u)(
@@ -208,11 +208,11 @@ const parseNamedDate = (input: string) => {
   );
   if (Option.isSome(monthFirst)) {
     return namedDatePeriod(
-      monthFirst.value[3],
-      monthFirst.value[1],
-      monthFirst.value[2],
+      textAt(monthFirst.value, 3),
+      textAt(monthFirst.value, 1),
+      textAt(monthFirst.value, 2),
       monthNumber,
-      (day, month, year) => `${day} ${title(months[month - 1])} ${year}`,
+      (day, month, year) => `${day} ${title(textAt(months, month - 1))} ${year}`,
     );
   }
   return Option.none<Period>();
@@ -231,29 +231,32 @@ const parseBasePeriod = (input: string) => {
 
   const yearMatch = EffectString.match(/^(?:(?:the )?(?:calendar )?year )?(\d{4})$/u)(input);
   if (Option.isSome(yearMatch)) {
-    const year = validYear(yearMatch.value[1]);
+    const year = validYear(textAt(yearMatch.value, 1));
     if (year !== undefined) return Option.some(fixedYearPeriod(year, String(year)));
   }
 
   const monthYear = EffectString.match(/^([a-z]+\.?) (\d{4})$/u)(input);
   if (Option.isSome(monthYear)) {
-    const month = monthNumber(monthYear.value[1]);
-    const year = validYear(monthYear.value[2]);
+    const month = monthNumber(textAt(monthYear.value, 1));
+    const year = validYear(textAt(monthYear.value, 2));
     if (month !== undefined && year !== undefined) {
-      return Option.some(fixedMonthPeriod(year, month, `${title(months[month - 1])} ${year}`));
+      return Option.some(
+        fixedMonthPeriod(year, month, `${title(textAt(months, month - 1))} ${year}`),
+      );
     }
   }
 
   const relativeMonth = EffectString.match(/^([a-z]+\.?) (?:of )?(last|this|next) year$/u)(input);
   if (Option.isSome(relativeMonth)) {
-    const month = monthNumber(relativeMonth.value[1]);
-    const direction = relativeDirection(relativeMonth.value[2]);
+    const directionText = textAt(relativeMonth.value, 2);
+    const month = monthNumber(textAt(relativeMonth.value, 1));
+    const direction = relativeDirection(directionText);
     if (month !== undefined) {
       return Option.some(
         monthOfRelativeYear(
           month,
           direction,
-          `${title(months[month - 1])} of ${relativeMonth.value[2]} year`,
+          `${title(textAt(months, month - 1))} of ${directionText} year`,
         ),
       );
     }
@@ -261,7 +264,9 @@ const parseBasePeriod = (input: string) => {
 
   const standaloneMonth = monthNumber(input);
   if (standaloneMonth !== undefined) {
-    return Option.some(monthOfRelativeYear(standaloneMonth, 0, title(months[standaloneMonth - 1])));
+    return Option.some(
+      monthOfRelativeYear(standaloneMonth, 0, title(textAt(months, standaloneMonth - 1))),
+    );
   }
 
   if (input === "today") return Option.some(relativePeriod("day", 0, "today"));
@@ -289,7 +294,7 @@ const parseBasePeriod = (input: string) => {
 
   const articlePeriod = EffectString.match(/^the (day|week|month|quarter|year)$/u)(input);
   if (Option.isSome(articlePeriod)) {
-    const entry = units.find((unit) => unit[0] === articlePeriod.value[1]);
+    const entry = units.find((unit) => unit[0] === textAt(articlePeriod.value, 1));
     if (entry !== undefined) {
       return Option.some(relativePeriod(entry[1], 0, currentPeriod(entry[0])));
     }
@@ -299,9 +304,9 @@ const parseBasePeriod = (input: string) => {
     /^(?:the )?(day|week|month|quarter|year) (before last|after next)$/u,
   )(input);
   if (Option.isSome(outerRelative)) {
-    const entry = units.find((unit) => unit[0] === outerRelative.value[1]);
+    const entry = units.find((unit) => unit[0] === textAt(outerRelative.value, 1));
     if (entry !== undefined) {
-      const direction = outerRelative.value[2] === "before last" ? -2 : 2;
+      const direction = textAt(outerRelative.value, 2) === "before last" ? -2 : 2;
       return Option.some(relativePeriod(entry[1], direction, input));
     }
   }
@@ -310,13 +315,12 @@ const parseBasePeriod = (input: string) => {
     /^(?:the )?(last|previous|this|current|next|coming|upcoming) ([a-z]+)$/u,
   )(input);
   if (Option.isSome(relative)) {
-    const unit = units.find((entry) => entry[0] === relative.value[2])?.[1];
+    const unitText = textAt(relative.value, 2);
+    const unit = units.find((entry) => entry[0] === unitText)?.[1];
     if (unit !== undefined) {
-      const direction = relativeDirection(relative.value[1]);
+      const direction = relativeDirection(textAt(relative.value, 1));
       const canonicalDirection = relativeDirectionName(direction);
-      return Option.some(
-        relativePeriod(unit, direction, `${canonicalDirection} ${relative.value[2]}`),
-      );
+      return Option.some(relativePeriod(unit, direction, `${canonicalDirection} ${unitText}`));
     }
   }
 
@@ -326,9 +330,10 @@ const parseBasePeriod = (input: string) => {
 const parsePeriod = (input: string) => {
   const edge = EffectString.match(/^(?:the )?(start|beginning|end) of (.+)$/u)(input);
   if (Option.isSome(edge)) {
-    const period = parseBasePeriod(edge.value[2]);
+    const period = parseBasePeriod(textAt(edge.value, 2));
     if (Option.isSome(period)) {
-      const name = edge.value[1] === "beginning" ? "start" : edge.value[1];
+      const edgeName = textAt(edge.value, 1);
+      const name = edgeName === "beginning" ? "start" : edgeName;
       const canonical = `${name} of ${period.value.canonical}`;
       return Option.some(
         name === "end"
@@ -383,10 +388,11 @@ const parseCalendarOffset = (input: string) => {
     /^(?:(?:a|one) (day|week|month|quarter|year) (ago|prior|from now)|in (?:a|one) (day|week|month|quarter|year))$/u,
   )(input);
   if (Option.isSome(singular)) {
-    const unitText = singular.value[1] ?? singular.value[3];
+    const unitText = textAt(singular.value, 1) || textAt(singular.value, 3);
     const entry = units.find((unit) => unit[0] === unitText);
     if (entry !== undefined) {
-      const isPast = singular.value[2] === "ago" || singular.value[2] === "prior";
+      const directionText = textAt(singular.value, 2);
+      const isPast = directionText === "ago" || directionText === "prior";
       const direction = isPast ? -1 : 1;
       const canonical = isPast ? `1 ${entry[0]} ago` : `in 1 ${entry[0]}`;
       return Option.some(
@@ -404,13 +410,13 @@ const parseCalendarOffset = (input: string) => {
   const futureFromNow = EffectString.match(
     /^([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years) from now$/u,
   )(input);
-  const match = [past, futureIn, futureFromNow].find(Option.isSome)?.value;
-  if (match === undefined) return Option.none<ReturnType<typeof candidate>>();
-  const amount = parseTrailingCount(match[1]);
+  const match = Option.firstSomeOf([past, futureIn, futureFromNow]);
+  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  const amount = parseTrailingCount(textAt(match.value, 1));
   if (Option.isNone(amount)) return Option.none<ReturnType<typeof candidate>>();
-  const entry = countedUnit(match[2], amount.value);
+  const unitText = textAt(match.value, 2);
+  const entry = countedUnit(unitText, amount.value);
   if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
-  const unitText = match[2];
   const direction = Option.isSome(past) ? -amount.value : amount.value;
   const canonical =
     direction < 0 ? `${amount.value} ${unitText} ago` : `in ${amount.value} ${unitText}`;
@@ -426,11 +432,11 @@ const parseRollingPeriod = (input: string) => {
   const future = EffectString.match(
     /^(?:(?:next|coming|within) |(?:in|over|within) the (?:next|coming) )([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years)$/u,
   )(input);
-  const match = [past, future].find(Option.isSome)?.value;
-  if (match === undefined) return Option.none<ReturnType<typeof candidate>>();
-  const amount = parseTrailingCount(match[1]);
+  const match = Option.firstSomeOf([past, future]);
+  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  const amount = parseTrailingCount(textAt(match.value, 1));
   if (Option.isNone(amount)) return Option.none<ReturnType<typeof candidate>>();
-  const entry = countedUnit(match[2], amount.value);
+  const entry = countedUnit(textAt(match.value, 2), amount.value);
   if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
   const isFuture = Option.isSome(future);
   const range = isFuture

@@ -25,7 +25,6 @@ import { normalizeNaturalText } from "../src/natural/text.ts";
 const alternateEnglish = new BaseLanguageContribution({
   locale: "en",
   vocabulary: ["now"],
-  correct: undefined,
   parseExact: () => Option.none(),
   render: () => Option.none(),
 });
@@ -74,7 +73,6 @@ const extensionPlugin = (id: string, priority: number, canonical: string, offset
 const regionalEnglish = new BaseLanguageContribution({
   locale: "en-US",
   vocabulary: ["regional"],
-  correct: undefined,
   parseExact: () => Option.none(),
   render: () => Option.none(),
 });
@@ -87,7 +85,6 @@ const regionalPlugin = {
 const scriptLanguage = new BaseLanguageContribution({
   locale: "zh-Hant",
   vocabulary: [],
-  correct: undefined,
   parseExact: () => Option.none(),
   render: () => Option.none(),
 });

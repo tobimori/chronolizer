@@ -48,11 +48,7 @@ const resultFromCandidates = (
   candidates: EffectArray.NonEmptyReadonlyArray<NaturalCandidate>,
   corrections: ReadonlyArray<Correction>,
 ) => {
-  const distinct = EffectArray.sortWith(
-    distinctCandidates(candidates),
-    (candidate) => candidate.canonical,
-    Order.String,
-  );
+  const distinct = distinctCandidates(candidates);
   const selected = EffectArray.headNonEmpty(distinct);
   const alternatives = EffectArray.tailNonEmpty(distinct).map((candidate) =>
     NaturalAlternative.make({
@@ -117,7 +113,7 @@ export const parseNatural = Effect.fn("chronolizer.parseNatural")(function* (
   }
   const first = EffectArray.headNonEmpty(successful);
   const best = EffectArray.prepend(
-    EffectArray.filter(
+    EffectArray.takeWhile(
       EffectArray.tailNonEmpty(successful),
       (entry) => entry.correction.cost === first.correction.cost,
     ),
@@ -144,7 +140,7 @@ export const suggestNatural = Effect.fn("chronolizer.suggestNatural")(function* 
   const normalized = language.normalize(input, language.locale);
   const limit = suggestionLimit(options.limit);
   if (limit === 0) return [];
-  const candidateLimit = Math.min(limit * 2, 200);
+  const candidateLimit = limit * 2;
   const suggestions = EffectArray.flatMap(
     EffectArray.dedupe(language.suggest(normalized, candidateLimit)),
     (text) =>

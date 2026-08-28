@@ -46,7 +46,7 @@ const phraseScore = (input: string, phrase: string) => {
 export const completeYearPrefix = (input: string) => {
   const match = EffectString.match(/(?:^| )(\d{3,4})$/u)(input);
   if (Option.isNone(match)) return [];
-  const prefix = match.value[1];
+  const prefix = match.value[1] ?? "";
   if (prefix.length === 4) {
     const year = Number(prefix);
     return year >= 1 && year <= 9998 ? [prefix] : [];
