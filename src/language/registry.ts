@@ -3,6 +3,7 @@ import {
   Context,
   Effect,
   Layer,
+  Match,
   Option,
   Order,
   Ref,
@@ -61,19 +62,20 @@ export class LanguageRegistry extends Context.Service<LanguageRegistry, Language
   "chronolizer/LanguageRegistry",
 ) {}
 
-const metadataOf = (contribution: LanguageContribution) => {
-  if (contribution._tag === "BaseLanguage") {
-    return BaseLanguageMetadata.make({
-      locale: contribution.locale,
-      vocabulary: contribution.vocabulary,
-    });
-  }
-  return LanguageExtensionMetadata.make({
-    locale: contribution.locale,
-    priority: contribution.priority,
-    vocabulary: contribution.vocabulary,
+const metadataOf = (contribution: LanguageContribution) =>
+  Match.valueTags(contribution, {
+    BaseLanguage: (base) =>
+      BaseLanguageMetadata.make({
+        locale: base.locale,
+        vocabulary: base.vocabulary,
+      }),
+    LanguageExtension: (extension) =>
+      LanguageExtensionMetadata.make({
+        locale: extension.locale,
+        priority: extension.priority,
+        vocabulary: extension.vocabulary,
+      }),
   });
-};
 
 const localeCandidates = (locale: string) => {
   const separator = locale.indexOf("-");
@@ -160,26 +162,43 @@ const createRegistry = Effect.gen(function* () {
         });
       }
 
-      const current = yield* Ref.get(entries);
-      const conflictingBase = current.find(
-        (entry) =>
-          contribution._tag === "BaseLanguage" &&
-          entry.contribution._tag === "BaseLanguage" &&
-          entry.contribution.locale === contribution.locale,
-      );
-      if (conflictingBase !== undefined) {
-        return yield* new LanguageConflictError({
-          locale: contribution.locale,
-          firstPluginId: conflictingBase.pluginId,
-          secondPluginId: pluginId,
-          message: "Only one base language can be registered for a locale",
-        });
-      }
-
       const token = Symbol(pluginId);
-      yield* Ref.update(entries, (items) => [...items, { token, pluginId, contribution }]);
-      yield* Effect.addFinalizer(() =>
-        Ref.update(entries, (items) => items.filter((entry) => entry.token !== token)),
+      yield* Effect.acquireRelease(
+        Ref.modify<
+          ReadonlyArray<RegisteredContribution>,
+          Result.Result<symbol, LanguageConflictError>
+        >(entries, (current) => {
+          const conflictingBase = EffectArray.findFirst(
+            current,
+            (entry) =>
+              contribution._tag === "BaseLanguage" &&
+              entry.contribution._tag === "BaseLanguage" &&
+              entry.contribution.locale === contribution.locale,
+          );
+          return Option.match(conflictingBase, {
+            onNone: () =>
+              [
+                Result.succeed(token),
+                EffectArray.append(current, { token, pluginId, contribution }),
+              ] as const,
+            onSome: (conflict) =>
+              [
+                Result.fail(
+                  new LanguageConflictError({
+                    locale: contribution.locale,
+                    firstPluginId: conflict.pluginId,
+                    secondPluginId: pluginId,
+                    message: "Only one base language can be registered for a locale",
+                  }),
+                ),
+                current,
+              ] as const,
+          });
+        }).pipe(Effect.flatMap((result) => Effect.fromResult(result))),
+        (registeredToken) =>
+          Ref.update(entries, (items) =>
+            EffectArray.filter(items, (entry) => entry.token !== registeredToken),
+          ),
       );
     });
 

@@ -128,6 +128,23 @@ describe("language registry", () => {
     }),
   );
 
+  it.effect("atomically accepts one of two concurrent base registrations", () =>
+    Effect.gen(function* () {
+      const registry = yield* LanguageRegistry;
+      const results = yield* Effect.scoped(
+        Effect.all(
+          [
+            Effect.result(registry.register("example/first", EnglishContribution)),
+            Effect.result(registry.register("example/second", alternateEnglish)),
+          ],
+          { concurrency: "unbounded" },
+        ),
+      );
+      expect(results.filter((result) => result._tag === "Success")).toHaveLength(1);
+      expect(results.filter((result) => result._tag === "Failure")).toHaveLength(1);
+    }).pipe(Effect.provide(LanguageRegistryLayer)),
+  );
+
   it.effect("removes a registration when its Scope closes", () =>
     Effect.gen(function* () {
       const registry = yield* LanguageRegistry;
