@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect";
+import { Array as EffectArray, Effect, Option, Order } from "effect";
 
 import type { DateRangeExpr } from "../ast/schemas.ts";
 import { formatFilter } from "../filter/codec.ts";
@@ -28,30 +28,23 @@ const rangeKey = (range: DateRangeExpr) => {
   ].join("|");
 };
 
-const distinctCandidates = (candidates: ReadonlyArray<NaturalCandidate>) => {
-  const keys = new Set<string>();
-  const distinct: Array<NaturalCandidate> = [];
-  for (const candidate of candidates) {
-    const key = rangeKey(candidate.range);
-    if (keys.has(key)) continue;
-    keys.add(key);
-    distinct.push(candidate);
-  }
-  return distinct;
-};
+const distinctCandidates = (candidates: EffectArray.NonEmptyReadonlyArray<NaturalCandidate>) =>
+  EffectArray.dedupeWith(
+    candidates,
+    (left, right) => rangeKey(left.range) === rangeKey(right.range),
+  );
 
 const resultFromCandidates = (
-  candidates: ReadonlyArray<NaturalCandidate>,
+  candidates: EffectArray.NonEmptyReadonlyArray<NaturalCandidate>,
   corrections: ReadonlyArray<Correction>,
 ) => {
-  const distinct = distinctCandidates(candidates).sort((left, right) =>
-    left.canonical.localeCompare(right.canonical),
+  const distinct = EffectArray.sortWith(
+    distinctCandidates(candidates),
+    (candidate) => candidate.canonical,
+    Order.String,
   );
-  const selected = distinct[0];
-  if (selected === undefined) {
-    throw new Error("At least one natural-language candidate is required");
-  }
-  const alternatives = distinct.slice(1).map((candidate) =>
+  const selected = EffectArray.headNonEmpty(distinct);
+  const alternatives = EffectArray.tailNonEmpty(distinct).map((candidate) =>
     NaturalAlternative.make({
       canonical: candidate.canonical,
       range: candidate.range,
@@ -79,7 +72,7 @@ export const parseNatural = (input: string, options: ParseNaturalOptions) =>
     }
 
     const exact = language.parseExact(normalized);
-    if (exact.length > 0) return resultFromCandidates(exact, []);
+    if (EffectArray.isReadonlyArrayNonEmpty(exact)) return resultFromCandidates(exact, []);
     if (options.typoMode !== "tolerant") {
       return yield* new NaturalLanguageParseError({
         input,
@@ -102,9 +95,22 @@ export const parseNatural = (input: string, options: ParseNaturalOptions) =>
       });
     }
     const best = successful.filter((entry) => entry.cost === minimum);
+    if (!EffectArray.isReadonlyArrayNonEmpty(best)) {
+      return yield* new NaturalLanguageParseError({
+        input,
+        locale: options.locale,
+        message: "No minimum-cost typo correction was available",
+      });
+    }
     const candidates = best.flatMap((entry) => entry.candidates);
-    const corrections = best[0]?.corrections ?? [];
-    return resultFromCandidates(candidates, corrections);
+    if (!EffectArray.isReadonlyArrayNonEmpty(candidates)) {
+      return yield* new NaturalLanguageParseError({
+        input,
+        locale: options.locale,
+        message: "No corrected input produced a date-range candidate",
+      });
+    }
+    return resultFromCandidates(candidates, EffectArray.headNonEmpty(best).corrections);
   });
 
 export const formatNatural = (range: DateRangeExpr, options: FormatNaturalOptions) =>

@@ -19,14 +19,26 @@ export type ResolvedLowerBound = typeof ResolvedLowerBound.Type;
 export const ResolvedUpperBound = Schema.Union([ResolvedLessThan, ResolvedLessThanOrEqual]);
 export type ResolvedUpperBound = typeof ResolvedUpperBound.Type;
 
-export const ResolvedDateRange = Schema.TaggedStruct("ResolvedDateRange", {
-  lower: Schema.optionalKey(ResolvedLowerBound),
-  upper: Schema.optionalKey(ResolvedUpperBound),
-}).check(
-  Schema.makeFilter((range) => range.lower !== undefined || range.upper !== undefined, {
-    expected: "a resolved range with at least one bound",
-  }),
-);
+const ResolvedBoundedDateRange = Schema.TaggedStruct("ResolvedDateRange", {
+  lower: ResolvedLowerBound,
+  upper: ResolvedUpperBound,
+});
+
+const ResolvedLowerOpenDateRange = Schema.TaggedStruct("ResolvedDateRange", {
+  lower: ResolvedLowerBound,
+  upper: Schema.optionalKey(Schema.Never),
+});
+
+const ResolvedUpperOpenDateRange = Schema.TaggedStruct("ResolvedDateRange", {
+  lower: Schema.optionalKey(Schema.Never),
+  upper: ResolvedUpperBound,
+});
+
+export const ResolvedDateRange = Schema.Union([
+  ResolvedBoundedDateRange,
+  ResolvedLowerOpenDateRange,
+  ResolvedUpperOpenDateRange,
+]).annotate({ identifier: "ResolvedDateRange" });
 export type ResolvedDateRange = typeof ResolvedDateRange.Type;
 
 export class ResolutionError extends Schema.TaggedError<ResolutionError>()("ResolutionError", {

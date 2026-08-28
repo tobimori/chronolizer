@@ -82,10 +82,7 @@ export const formatFilter = (range: DateRangeExpr) => {
       : DateFilter.make({ gte: lower.gte, lte: upper.lte });
   }
   if (normalized.lower !== undefined) return formatLower(normalized.lower);
-  if (normalized.upper !== undefined) return formatUpper(normalized.upper);
-  throw new InvalidDateFilterError({
-    message: "A date range must contain at least one bound",
-  });
+  return formatUpper(normalized.upper);
 };
 
 export const completePeriod = (start: InstantExpr, end: InstantExpr) =>

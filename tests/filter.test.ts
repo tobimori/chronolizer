@@ -9,7 +9,7 @@ import {
   startOf,
 } from "../src/ast/constructors.ts";
 import { normalizeInstant, normalizeRange } from "../src/ast/normalize.ts";
-import { Unit } from "../src/ast/schemas.ts";
+import { DateRangeExpr, Unit } from "../src/ast/schemas.ts";
 import { parseFilter, formatFilter } from "../src/filter/codec.ts";
 import { formatInstantExpression, parseInstantExpression } from "../src/filter/expression.ts";
 import { DateFilter } from "../src/filter/schema.ts";
@@ -138,6 +138,11 @@ describe("date filters", () => {
       expect(formatFilter(range)).toEqual({ gte: "2025-01-01" });
     }),
   );
+
+  it("rejects a semantic range without bounds at the Schema boundary", () => {
+    const valid = boundedRange(greaterThanOrEqual(now()), lessThan(shift(now(), 1, "day")));
+    expect(Schema.is(DateRangeExpr)({ ...valid, lower: undefined, upper: undefined })).toBe(false);
+  });
 
   it("rejects conflicting or empty filters at the Schema boundary", () => {
     const isDateFilter = Schema.is(DateFilter);

@@ -103,14 +103,24 @@ export type LowerBound = typeof LowerBound.Type;
 export const UpperBound = Schema.Union([LessThan, LessThanOrEqual]);
 export type UpperBound = typeof UpperBound.Type;
 
-const DateRangeStruct = Schema.TaggedStruct("DateRange", {
-  lower: Schema.optionalKey(LowerBound),
-  upper: Schema.optionalKey(UpperBound),
+const BoundedDateRange = Schema.TaggedStruct("DateRange", {
+  lower: LowerBound,
+  upper: UpperBound,
 });
 
-export const DateRangeExpr = DateRangeStruct.check(
-  Schema.makeFilter((range) => range.lower !== undefined || range.upper !== undefined, {
-    expected: "a date range with at least one bound",
-  }),
-).annotate({ identifier: "DateRangeExpr" });
+const LowerOpenDateRange = Schema.TaggedStruct("DateRange", {
+  lower: LowerBound,
+  upper: Schema.optionalKey(Schema.Never),
+});
+
+const UpperOpenDateRange = Schema.TaggedStruct("DateRange", {
+  lower: Schema.optionalKey(Schema.Never),
+  upper: UpperBound,
+});
+
+export const DateRangeExpr = Schema.Union([
+  BoundedDateRange,
+  LowerOpenDateRange,
+  UpperOpenDateRange,
+]).annotate({ identifier: "DateRangeExpr" });
 export type DateRangeExpr = typeof DateRangeExpr.Type;

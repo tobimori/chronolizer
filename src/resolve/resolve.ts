@@ -87,26 +87,22 @@ export const resolve = (range: DateRangeExpr) =>
   Effect.gen(function* () {
     const zone = yield* DateTime.CurrentTimeZone;
     const reference = yield* DateTime.nowInCurrentZone;
-    const lower =
-      range.lower === undefined ? undefined : yield* resolveLower(range.lower, reference, zone);
-    const upper =
-      range.upper === undefined ? undefined : yield* resolveUpper(range.upper, reference, zone);
-
-    if (
-      lower !== undefined &&
-      upper !== undefined &&
-      DateTime.toEpochMillis(lower.value) >= DateTime.toEpochMillis(upper.value)
-    ) {
-      return yield* new ResolutionError({
-        message: "The lower range endpoint must be before the upper endpoint",
-      });
-    }
-    if (lower !== undefined && upper !== undefined) {
+    if (range.lower !== undefined && range.upper !== undefined) {
+      const lower = yield* resolveLower(range.lower, reference, zone);
+      const upper = yield* resolveUpper(range.upper, reference, zone);
+      if (DateTime.toEpochMillis(lower.value) >= DateTime.toEpochMillis(upper.value)) {
+        return yield* new ResolutionError({
+          message: "The lower range endpoint must be before the upper endpoint",
+        });
+      }
       return ResolvedDateRange.make({ lower, upper });
     }
-    if (lower !== undefined) return ResolvedDateRange.make({ lower });
-    if (upper !== undefined) return ResolvedDateRange.make({ upper });
-    return yield* new ResolutionError({
-      message: "A date range must contain at least one bound",
+    if (range.lower !== undefined) {
+      return ResolvedDateRange.make({
+        lower: yield* resolveLower(range.lower, reference, zone),
+      });
+    }
+    return ResolvedDateRange.make({
+      upper: yield* resolveUpper(range.upper, reference, zone),
     });
   });

@@ -53,8 +53,5 @@ export const normalizeRange = (range: DateRangeExpr) => {
   if (range.lower !== undefined) {
     return lowerOpenRange(normalizeLower(range.lower));
   }
-  if (range.upper !== undefined) {
-    return upperOpenRange(normalizeUpper(range.upper));
-  }
-  throw new Error("DateRangeExpr must contain at least one bound");
+  return upperOpenRange(normalizeUpper(range.upper));
 };
