@@ -5,6 +5,7 @@ import { TestClock } from "effect/testing";
 import { parseFilter } from "../src/filter/codec.ts";
 import type { DateFilter } from "../src/filter/schema.ts";
 import { resolve } from "../src/resolve/resolve.ts";
+import type { ResolvedDateRange } from "../src/resolve/schema.ts";
 
 const setNow = (iso: string) => TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe(iso)));
 
@@ -15,6 +16,11 @@ const resolveFilter = Effect.fn(function* (filter: DateFilter, zone: string) {
 
 const formatEndpoint = (value: DateTime.Zoned | undefined) =>
   value === undefined ? undefined : DateTime.formatIsoZoned(value);
+
+const rangeDuration = (range: ResolvedDateRange) =>
+  range.lower === undefined || range.upper === undefined
+    ? undefined
+    : DateTime.toEpochMillis(range.upper.value) - DateTime.toEpochMillis(range.lower.value);
 
 describe("date-range resolution", () => {
   it.effect(
@@ -56,21 +62,19 @@ describe("date-range resolution", () => {
     }),
   );
 
-  it.effect(
-    "maps all quarter starts and ends",
-    Effect.fn(function* () {
-      const cases = [
-        ["2025-02-20T10:00:00.000Z", "2025-01-01", "2025-04-01"],
-        ["2025-05-20T10:00:00.000Z", "2025-04-01", "2025-07-01"],
-        ["2025-09-20T10:00:00.000Z", "2025-07-01", "2025-10-01"],
-        ["2025-12-20T10:00:00.000Z", "2025-10-01", "2026-01-01"],
-      ] as const;
-      for (const [now, lower, upper] of cases) {
-        yield* setNow(now);
-        const range = yield* resolveFilter({ gte: "now/q", lt: "now/q+1q" }, "UTC");
-        expect(formatEndpoint(range.lower?.value), now).toBe(`${lower}T00:00:00.000+00:00[UTC]`);
-        expect(formatEndpoint(range.upper?.value), now).toBe(`${upper}T00:00:00.000+00:00[UTC]`);
-      }
+  it.effect.each([
+    ["2025-02-20T10:00:00.000Z", "2025-01-01", "2025-04-01"],
+    ["2025-05-20T10:00:00.000Z", "2025-04-01", "2025-07-01"],
+    ["2025-09-20T10:00:00.000Z", "2025-07-01", "2025-10-01"],
+    ["2025-12-20T10:00:00.000Z", "2025-10-01", "2026-01-01"],
+  ] as const)(
+    "maps quarter containing %s from %s through %s",
+    Effect.fn(function* (testCase) {
+      const [now, lower, upper] = testCase;
+      yield* setNow(now);
+      const range = yield* resolveFilter({ gte: "now/q", lt: "now/q+1q" }, "UTC");
+      expect(formatEndpoint(range.lower?.value)).toBe(`${lower}T00:00:00.000+00:00[UTC]`);
+      expect(formatEndpoint(range.upper?.value)).toBe(`${upper}T00:00:00.000+00:00[UTC]`);
     }),
   );
 
@@ -79,15 +83,7 @@ describe("date-range resolution", () => {
     Effect.fn(function* () {
       yield* setNow("2025-03-30T12:00:00.000Z");
       const range = yield* resolveFilter({ gte: "now/d", lt: "now/d+1d" }, "Europe/Berlin");
-      const lower = range.lower?.value;
-      const upper = range.upper?.value;
-      expect(lower).toBeDefined();
-      expect(upper).toBeDefined();
-      if (lower !== undefined && upper !== undefined) {
-        expect(DateTime.toEpochMillis(upper) - DateTime.toEpochMillis(lower)).toBe(
-          23 * 60 * 60 * 1_000,
-        );
-      }
+      expect(rangeDuration(range)).toBe(23 * 60 * 60 * 1_000);
     }),
   );
 
@@ -109,15 +105,7 @@ describe("date-range resolution", () => {
     Effect.fn(function* () {
       yield* setNow("2025-10-26T12:00:00.000Z");
       const range = yield* resolveFilter({ gte: "now/d", lt: "now/d+1d" }, "Europe/Berlin");
-      const lower = range.lower?.value;
-      const upper = range.upper?.value;
-      expect(lower).toBeDefined();
-      expect(upper).toBeDefined();
-      if (lower !== undefined && upper !== undefined) {
-        expect(DateTime.toEpochMillis(upper) - DateTime.toEpochMillis(lower)).toBe(
-          25 * 60 * 60 * 1_000,
-        );
-      }
+      expect(rangeDuration(range)).toBe(25 * 60 * 60 * 1_000);
     }),
   );
 
@@ -158,12 +146,13 @@ describe("date-range resolution", () => {
   );
 
   it.effect(
-    "rejects an empty or reversed resolved interval",
+    "rejects a reversed resolved interval",
     Effect.fn(function* () {
       const error = yield* Effect.flip(
         resolveFilter({ gte: "2025-02-01", lt: "2025-01-01" }, "UTC"),
       );
       expect(error._tag).toBe("ResolutionError");
+      expect(error.message).toBe("The lower range endpoint must be before the upper endpoint");
     }),
   );
 });

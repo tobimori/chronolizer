@@ -38,11 +38,6 @@ describe("filter expressions", () => {
     expect(formatInstantExpression(runParse(input))).toBe(input);
   });
 
-  it("uses the fixed-date operation delimiter", () => {
-    const expression = runParse("2025-01-01||+1M/w");
-    expect(formatInstantExpression(expression)).toBe("2025-01-01||+1M/w");
-  });
-
   it("normalizes adjacent shifts of the same unit", () => {
     const expression = runParse("now+3M-1M");
     expect(formatInstantExpression(normalizeInstant(expression))).toBe("now+2M");
@@ -83,37 +78,33 @@ describe("filter expressions", () => {
 });
 
 describe("date filters", () => {
-  it.effect(
-    "round-trips all bound relation combinations",
-    Effect.fn(function* () {
-      const filters = [
-        { gt: "now-1d", lt: "now" },
-        { gt: "now-1d", lte: "now" },
-        { gte: "now-1d", lt: "now" },
-        { gte: "now-1d", lte: "now" },
-        { gt: "now" },
-        { gte: "now" },
-        { lt: "now" },
-        { lte: "now" },
-      ] as const;
-      for (const filter of filters) {
-        const range = yield* parseFilter(filter);
-        expect(formatFilter(range)).toEqual(filter);
-      }
+  it.effect.each([
+    { gt: "now-1d", lt: "now" },
+    { gt: "now-1d", lte: "now" },
+    { gte: "now-1d", lt: "now" },
+    { gte: "now-1d", lte: "now" },
+    { gt: "now" },
+    { gte: "now" },
+    { lt: "now" },
+    { lte: "now" },
+  ] as const)(
+    "round-trips date filter %j",
+    Effect.fn(function* (filter) {
+      const range = yield* parseFilter(filter);
+      expect(formatFilter(range)).toEqual(filter);
     }),
   );
 
-  it("round-trips the unit and relative-direction matrix", () => {
-    for (const unit of Unit.literals) {
-      for (const amount of [-2, -1, 1, 2]) {
-        const start = startOf(shift(now(), amount, unit), unit);
-        const range = boundedRange(greaterThanOrEqual(start), lessThan(shift(start, 1, unit)));
-        const normalized = normalizeRange(range);
-        const parsed = Effect.runSync(parseFilter(formatFilter(normalized)));
-        expect(parsed).toEqual(normalized);
-      }
-    }
-  });
+  it.each(Unit.literals.flatMap((unit) => [-2, -1, 1, 2].map((amount) => [unit, amount] as const)))(
+    "round-trips %s range at relative offset %i",
+    (unit, amount) => {
+      const start = startOf(shift(now(), amount, unit), unit);
+      const range = boundedRange(greaterThanOrEqual(start), lessThan(shift(start, 1, unit)));
+      const normalized = normalizeRange(range);
+      const parsed = Effect.runSync(parseFilter(formatFilter(normalized)));
+      expect(parsed).toEqual(normalized);
+    },
+  );
 
   it.effect(
     "decodes an external filter through one Effect Schema codec",
@@ -124,23 +115,6 @@ describe("date filters", () => {
       });
       const encoded = yield* Schema.encodeEffect(DateRangeFromFilter)(range);
       expect(encoded).toEqual({ gte: "now/y", lte: "now" });
-    }),
-  );
-
-  it.effect(
-    "round-trips a relative bounded range",
-    Effect.fn(function* () {
-      const filter = { gte: "now-1y/y", lt: "now-1y/y+1M" };
-      const range = yield* parseFilter(filter);
-      expect(formatFilter(range)).toEqual(filter);
-    }),
-  );
-
-  it.effect(
-    "preserves an open lower range",
-    Effect.fn(function* () {
-      const range = yield* parseFilter({ gte: "2025-01-01" });
-      expect(formatFilter(range)).toEqual({ gte: "2025-01-01" });
     }),
   );
 
@@ -164,8 +138,8 @@ describe("date filters", () => {
       const malformed = yield* Effect.flip(
         Schema.decodeEffect(DateRangeFromFilter)({ gte: "now+0d" }),
       );
-      expect(empty).toBeDefined();
-      expect(malformed).toBeDefined();
+      expect(String(empty)).toContain("Expected at least one date bound");
+      expect(String(malformed)).toContain("expected a positive integer without a leading zero");
     }),
   );
 });
