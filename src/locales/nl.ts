@@ -34,6 +34,7 @@ import {
   namedDatePeriod,
   openBoundaryCandidate,
   parseTrailingCount,
+  periodDay,
   periodEndDay,
   periodRange,
   periodsFromPhrases,
@@ -86,6 +87,7 @@ interface UnitForms {
   readonly unit: Unit;
   readonly singular: string;
   readonly plural: string;
+  readonly article: "de" | "het";
   readonly current: string;
   readonly previous: string;
   readonly next: string;
@@ -98,6 +100,7 @@ const units: ReadonlyArray<UnitForms> = [
     unit: "day",
     singular: "dag",
     plural: "dagen",
+    article: "de",
     current: "vandaag",
     previous: "gisteren",
     next: "morgen",
@@ -108,6 +111,7 @@ const units: ReadonlyArray<UnitForms> = [
     unit: "week",
     singular: "week",
     plural: "weken",
+    article: "de",
     current: "deze week",
     previous: "vorige week",
     next: "volgende week",
@@ -118,6 +122,7 @@ const units: ReadonlyArray<UnitForms> = [
     unit: "month",
     singular: "maand",
     plural: "maanden",
+    article: "de",
     current: "deze maand",
     previous: "vorige maand",
     next: "volgende maand",
@@ -128,6 +133,7 @@ const units: ReadonlyArray<UnitForms> = [
     unit: "quarter",
     singular: "kwartaal",
     plural: "kwartalen",
+    article: "het",
     current: "dit kwartaal",
     previous: "vorig kwartaal",
     next: "volgend kwartaal",
@@ -138,6 +144,7 @@ const units: ReadonlyArray<UnitForms> = [
     unit: "year",
     singular: "jaar",
     plural: "jaar",
+    article: "het",
     current: "dit jaar",
     previous: "vorig jaar",
     next: "volgend jaar",
@@ -146,20 +153,20 @@ const units: ReadonlyArray<UnitForms> = [
   },
 ];
 
-const title = (value: string) => `${value.slice(0, 1).toLocaleUpperCase("nl")}${value.slice(1)}`;
+const afterVan = (period: string) => (period.startsWith("van ") ? period.slice(4) : period);
 
 const unitAliases = [
-  ["dag", "day"],
-  ["dagen", "day"],
-  ["week", "week"],
-  ["weken", "week"],
-  ["maand", "month"],
-  ["maanden", "month"],
-  ["kwartaal", "quarter"],
-  ["kwartalen", "quarter"],
-  ["jaar", "year"],
-  ["jaren", "year"],
-] as const satisfies ReadonlyArray<readonly [string, Unit]>;
+  ["dag", "day", "singular"],
+  ["dagen", "day", "plural"],
+  ["week", "week", "singular"],
+  ["weken", "week", "plural"],
+  ["maand", "month", "singular"],
+  ["maanden", "month", "plural"],
+  ["kwartaal", "quarter", "singular"],
+  ["kwartalen", "quarter", "plural"],
+  ["jaar", "year", "both"],
+  ["jaren", "year", "plural"],
+] as const satisfies ReadonlyArray<readonly [string, Unit, "singular" | "plural" | "both"]>;
 
 const periodAliases = [
   ...units.flatMap((entry) => [
@@ -276,14 +283,23 @@ const parseNamedDate = (input: string) => {
   const current = EffectString.match(/^(?:de )?([0-3]?\d)(?:e|ste|de)?(?: van)? ([a-z]+\.?)$/u)(
     input,
   );
-  return Option.isSome(current)
-    ? namedCurrentYearDatePeriod(
-        textAt(current.value, 2),
-        textAt(current.value, 1),
-        monthNumber,
-        currentDateLabel,
-      )
-    : Option.none<Period>();
+  if (Option.isSome(current)) {
+    return namedCurrentYearDatePeriod(
+      textAt(current.value, 2),
+      textAt(current.value, 1),
+      monthNumber,
+      currentDateLabel,
+    );
+  }
+
+  const relative = EffectString.match(/^(?:de )?([0-3]?\d)(?:e|ste|de)? van (.+)$/u)(input);
+  if (Option.isNone(relative)) return Option.none<Period>();
+  const periodText = textAt(relative.value, 2);
+  const alias = periodAliases.find((entry) => entry[0] === periodText && entry[1] === "month");
+  if (alias === undefined) return Option.none<Period>();
+  const day = Number(textAt(relative.value, 1));
+  const month = relativePeriod(alias[1], alias[2], alias[3]);
+  return periodDay(month, day, `${day} van ${alias[3]}`);
 };
 
 const quarterNumber = (value: string) => {
@@ -346,9 +362,7 @@ const parseBasePeriod = (input: string) => {
     const month = monthNumber(textAt(monthYear.value, 1));
     const year = validYear(textAt(monthYear.value, 2));
     if (month !== undefined && year !== undefined) {
-      return Option.some(
-        fixedMonthPeriod(year, month, `${title(textAt(months, month - 1))} ${year}`),
-      );
+      return Option.some(fixedMonthPeriod(year, month, `${textAt(months, month - 1)} ${year}`));
     }
   }
 
@@ -370,7 +384,7 @@ const parseBasePeriod = (input: string) => {
         monthOfRelativeYear(
           month,
           direction,
-          `${title(textAt(months, month - 1))} ${relativeYearName(direction)}`,
+          `${textAt(months, month - 1)} ${relativeYearName(direction)}`,
         ),
       );
     }
@@ -379,7 +393,7 @@ const parseBasePeriod = (input: string) => {
   const standaloneMonth = monthNumber(input);
   if (standaloneMonth !== undefined) {
     return Option.some(
-      monthOfRelativeYear(standaloneMonth, 0, title(textAt(months, standaloneMonth - 1))),
+      monthOfRelativeYear(standaloneMonth, 0, textAt(months, standaloneMonth - 1)),
     );
   }
 
@@ -423,7 +437,13 @@ const parsePeriod = (input: string) => {
   return parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
 };
 
-const countedUnit = (value: string) => unitAliases.find((entry) => entry[0] === value)?.[1];
+const countedUnit = (value: string, amount: number) => {
+  const expected = amount === 1 ? "singular" : "plural";
+  const alias = unitAliases.find(
+    (entry) => entry[0] === value && (entry[2] === expected || entry[2] === "both"),
+  );
+  return alias === undefined ? undefined : units.find((entry) => entry.unit === alias[1]);
+};
 
 const countedUnitPattern = "dag|dagen|week|weken|maand|maanden|kwartaal|kwartalen|jaar|jaren";
 const countedPattern = (source: string) =>
@@ -434,11 +454,13 @@ const calendarFuturePatterns = [
   countedPattern("^([1-9]\\d*) (UNIT) later$"),
 ];
 const rollingPastPatterns = [
-  countedPattern("^(?:de )?(?:afgelopen|laatste|vorige) ([1-9]\\d*) (UNIT)$"),
+  countedPattern("^(?:(?:de|in de) )?(?:afgelopen|laatste|vorige) ([1-9]\\d*) (UNIT)$"),
   countedPattern("^([1-9]\\d*) (?:afgelopen|laatste|vorige) (UNIT)$"),
 ];
 const rollingFuturePatterns = [
-  countedPattern("^(?:de )?(?:komende|volgende|aankomende) ([1-9]\\d*) (UNIT)$"),
+  countedPattern(
+    "^(?:(?:de|in de|binnen de) )?(?:komende|volgende|aankomende) ([1-9]\\d*) (UNIT)$",
+  ),
   countedPattern("^([1-9]\\d*) (?:komende|volgende|aankomende) (UNIT)$"),
 ];
 const rollingSincePattern = countedPattern("^(?:sinds|gedurende) ([1-9]\\d*) (UNIT)$");
@@ -447,26 +469,58 @@ const rollingBarePattern = countedPattern("^([1-9]\\d*) (UNIT)$");
 const firstPatternMatch = (input: string, patterns: ReadonlyArray<RegExp>) =>
   Option.firstSomeOf(patterns.map((pattern) => EffectString.match(pattern)(input)));
 
+const singularRollingCanonical = (entry: UnitForms, future: boolean) =>
+  future ? `vanaf nu gedurende een ${entry.singular}` : `sinds een ${entry.singular}`;
+
+const singularRollingPhrases = units.flatMap((entry) => [
+  { phrase: `${entry.article} afgelopen ${entry.singular}`, entry, future: false },
+  { phrase: `${entry.article} laatste ${entry.singular}`, entry, future: false },
+  { phrase: `sinds een ${entry.singular}`, entry, future: false },
+  { phrase: `gedurende ${entry.article} komende ${entry.singular}`, entry, future: true },
+  { phrase: `vanaf nu gedurende een ${entry.singular}`, entry, future: true },
+]);
+
+const singularCalendarOffsets = units.flatMap((entry) => [
+  { phrase: `een ${entry.singular} geleden`, entry, direction: -1 },
+  { phrase: `over een ${entry.singular}`, entry, direction: 1 },
+  { phrase: `binnen een ${entry.singular}`, entry, direction: 1 },
+]);
+
 const parseCalendarOffset = (input: string) => {
+  const singular = singularCalendarOffsets.find((entry) => entry.phrase === input);
+  if (singular !== undefined) {
+    return Option.some(
+      candidate(
+        periodRange(relativePeriod(singular.entry.unit, singular.direction, singular.phrase)),
+        singular.phrase,
+      ),
+    );
+  }
   const past = EffectString.match(calendarPastPattern)(input);
   const future = firstPatternMatch(input, calendarFuturePatterns);
   const match = Option.firstSomeOf([past, future]);
   if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
   const amount = parseTrailingCount(textAt(match.value, 1));
-  const unit = countedUnit(textAt(match.value, 2));
-  if (Option.isNone(amount) || unit === undefined) {
-    return Option.none<ReturnType<typeof candidate>>();
-  }
-  const entry = units.find((item) => item.unit === unit);
+  if (Option.isNone(amount)) return Option.none<ReturnType<typeof candidate>>();
+  const entry = countedUnit(textAt(match.value, 2), amount.value);
   if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
   const direction = Option.isSome(past) ? -amount.value : amount.value;
   const noun = amount.value === 1 ? entry.singular : entry.plural;
   const canonical =
     direction < 0 ? `${amount.value} ${noun} geleden` : `over ${amount.value} ${noun}`;
-  return Option.some(candidate(periodRange(relativePeriod(unit, direction, canonical)), canonical));
+  return Option.some(
+    candidate(periodRange(relativePeriod(entry.unit, direction, canonical)), canonical),
+  );
 };
 
 const parseRollingPeriod = (input: string) => {
+  const singular = singularRollingPhrases.find((entry) => entry.phrase === input);
+  if (singular !== undefined) {
+    const range = singular.future
+      ? futureRange(1, singular.entry.unit)
+      : trailingRange(1, singular.entry.unit);
+    return Option.some(candidate(range, singularRollingCanonical(singular.entry, singular.future)));
+  }
   const since = EffectString.match(rollingSincePattern)(input);
   const past = firstPatternMatch(input, rollingPastPatterns);
   const bare = EffectString.match(rollingBarePattern)(input);
@@ -474,17 +528,41 @@ const parseRollingPeriod = (input: string) => {
   const match = Option.firstSomeOf([since, past, bare, future]);
   if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
   const amount = parseTrailingCount(textAt(match.value, 1));
-  const unit = countedUnit(textAt(match.value, 2));
-  if (Option.isNone(amount) || unit === undefined) {
-    return Option.none<ReturnType<typeof candidate>>();
-  }
-  const entry = units.find((item) => item.unit === unit);
+  if (Option.isNone(amount)) return Option.none<ReturnType<typeof candidate>>();
+  const entry = countedUnit(textAt(match.value, 2), amount.value);
   if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
   const isFuture = Option.isSome(future);
-  const range = isFuture ? futureRange(amount.value, unit) : trailingRange(amount.value, unit);
+  const range = isFuture
+    ? futureRange(amount.value, entry.unit)
+    : trailingRange(amount.value, entry.unit);
+  if (amount.value === 1) {
+    return Option.some(candidate(range, singularRollingCanonical(entry, isFuture)));
+  }
   const modifier = isFuture ? "komende" : "afgelopen";
-  const noun = amount.value === 1 ? entry.singular : entry.plural;
-  return Option.some(candidate(range, `de ${modifier} ${amount.value} ${noun}`));
+  return Option.some(candidate(range, `de ${modifier} ${amount.value} ${entry.plural}`));
+};
+
+const parseElidedDateRange = (input: string) => {
+  const joined = EffectString.match(
+    /^(?:van ([0-3]?\d) tot(?: en met)?|tussen (?:de )?([0-3]?\d)(?:e)? en(?: de)?) ([0-3]?\d)(?:e)? (.+)$/u,
+  )(input);
+  const dashed = EffectString.match(/^([0-3]?\d)[–—-]([0-3]?\d) (.+)$/u)(input);
+  const match = Option.firstSomeOf([joined, dashed]);
+  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  const isJoined = Option.isSome(joined);
+  const lowerDay = textAt(match.value, 1) || textAt(match.value, 2);
+  const upperDay = textAt(match.value, isJoined ? 3 : 2);
+  const period = afterVan(textAt(match.value, isJoined ? 4 : 3));
+  const isRelativeMonth = periodAliases.some(
+    (entry) => entry[0] === period && entry[1] === "month",
+  );
+  const suffix = isRelativeMonth ? `van ${period}` : period;
+  return joinedPeriodCandidate(
+    `van ${lowerDay} ${suffix} tot en met ${upperDay} ${suffix}`,
+    [["van ", " tot en met "]],
+    parsePeriod,
+    (lower, upper) => `van ${lower} tot en met ${upper}`,
+  );
 };
 
 const boundaryCandidate = (input: string) =>
@@ -525,6 +603,9 @@ const parseDutch = (input: string) => {
     return Option.some(candidate(periodToDateRange(toDate.entry.unit), toDate.entry.toDate));
   }
 
+  const elided = parseElidedDateRange(input);
+  if (Option.isSome(elided)) return elided;
+
   const nowBounded = joinedNowCandidate(
     input,
     [
@@ -557,19 +638,31 @@ const parseDutch = (input: string) => {
   if (Option.isSome(bounded)) return bounded;
   const boundary = boundaryCandidate(input);
   if (Option.isSome(boundary)) return boundary;
-  return Option.map(parsePeriod(input), (period) =>
-    candidate(periodRange(period), period.canonical),
+  return parsePeriod(input).pipe(
+    Option.map((period) => candidate(periodRange(period), period.canonical)),
   );
 };
 
-const staticPeriodPhrases = [
-  ...periodAliases.map((entry) => entry[0]),
+const weekendPhrases = [
   "dit weekend",
   "vorig weekend",
   "volgend weekend",
   "het weekend voor het vorige",
   "het weekend na het volgende",
-  ...periodAliases.flatMap((entry) => [`begin van ${entry[0]}`, `eind van ${entry[0]}`]),
+];
+
+const edgePeriodPhrases = [
+  ...units
+    .filter((entry) => entry.unit !== "day")
+    .flatMap((entry) => [entry.current, entry.previous, entry.next]),
+  ...weekendPhrases,
+  ...months,
+].flatMap((period) => [`begin van ${period}`, `eind van ${period}`]);
+
+const staticPeriodPhrases = [
+  ...periodAliases.map((entry) => entry[0]),
+  ...weekendPhrases,
+  ...edgePeriodPhrases,
   ...[1, 2, 3, 4].flatMap((quarter) => [
     `k${quarter}`,
     `k${quarter} dit jaar`,
@@ -603,6 +696,8 @@ const countedSuggestions = (input: string) => {
 const dutchSuggestionPhrases = [
   ...units.map((entry) => entry.toDate),
   ...units.map((entry) => entry.remaining),
+  ...singularRollingPhrases.map((entry) => entry.phrase),
+  ...singularCalendarOffsets.map((entry) => entry.phrase),
   ...staticPeriodPhrases,
   ...prefixNaturalPhrases(staticPeriodPhrases, boundaryPrefixes),
   "tot nu toe",
@@ -641,16 +736,22 @@ const renderDutch = (range: DateRangeExpr) => {
   if (Option.isSome(future)) {
     const entry = units.find((unit) => unit.unit === future.value.unit);
     if (entry !== undefined) {
-      const noun = future.value.amount === 1 ? entry.singular : entry.plural;
-      return Option.some(`de komende ${future.value.amount} ${noun}`);
+      return Option.some(
+        future.value.amount === 1
+          ? singularRollingCanonical(entry, true)
+          : `de komende ${future.value.amount} ${entry.plural}`,
+      );
     }
   }
   const trailing = trailingPeriod(range);
   if (Option.isSome(trailing)) {
     const entry = units.find((unit) => unit.unit === trailing.value.unit);
     if (entry !== undefined) {
-      const noun = trailing.value.amount === 1 ? entry.singular : entry.plural;
-      return Option.some(`de afgelopen ${trailing.value.amount} ${noun}`);
+      return Option.some(
+        trailing.value.amount === 1
+          ? singularRollingCanonical(entry, false)
+          : `de afgelopen ${trailing.value.amount} ${entry.plural}`,
+      );
     }
   }
   const periods = [

@@ -67,6 +67,7 @@ describe("Dutch date ranges", () => {
     "3 afgelopen maanden",
     "sinds 3 maanden",
     "gedurende 3 maanden",
+    "in de afgelopen 3 maanden",
     "3 maanden",
   ])(
     "canonicalizes Dutch counted-month variant %j",
@@ -75,6 +76,32 @@ describe("Dutch date ranges", () => {
       expect(formatFilter(result.range)).toEqual({ gte: "now-3M", lte: "now" });
       expect(yield* formatNatural(result.range, { locale: "nl" })).toBe("de afgelopen 3 maanden");
     }, Effect.provide(DutchLanguageLayer)),
+  );
+
+  it.effect.each([
+    ["de afgelopen maand", "now-1M", "sinds een maand"],
+    ["de laatste week", "now-1w", "sinds een week"],
+    ["sinds een jaar", "now-1y", "sinds een jaar"],
+  ] as const)(
+    "distinguishes rolling Dutch singular period %s",
+    Effect.fn(function* (testCase) {
+      const [input, gte, canonical] = testCase;
+      const result = yield* parseDutch(input);
+      expect(formatFilter(result.range)).toEqual({ gte, lte: "now" });
+      expect(yield* formatNatural(result.range, { locale: "nl" })).toBe(canonical);
+    }, Effect.provide(DutchLanguageLayer)),
+  );
+
+  it.effect.each([
+    ["vanaf nu gedurende een maand", "now+1M"],
+    ["gedurende de komende week", "now+1w"],
+  ] as const)(
+    "maps rolling Dutch singular future %s",
+    Effect.fn(function* (testCase) {
+      const [input, lte] = testCase;
+      const result = yield* parseDutch(input);
+      expect(formatFilter(result.range)).toEqual({ gte: "now", lte });
+    }),
   );
 
   it.effect.each([
@@ -97,6 +124,7 @@ describe("Dutch date ranges", () => {
     ["de komende 2 maanden", "now+2M"],
     ["aankomende 2 kwartalen", "now+2q"],
     ["volgende 2 jaar", "now+2y"],
+    ["binnen de volgende 3 jaar", "now+3y"],
   ] as const)(
     "maps Dutch future rolling unit in %s",
     Effect.fn(function* (testCase) {
@@ -111,6 +139,8 @@ describe("Dutch date ranges", () => {
     ["binnen 3 jaar", "now+3y/y", "now+3y/y+1y", "over 3 jaar"],
     ["2 dagen later", "now+2d/d", "now+2d/d+1d", "over 2 dagen"],
     ["1 dag geleden", "now-1d/d", "now-1d/d+1d", "gisteren"],
+    ["een maand geleden", "now-1M/M", "now-1M/M+1M", "vorige maand"],
+    ["over een week", "now+1w/w", "now+1w/w+1w", "volgende week"],
   ] as const)(
     "maps Dutch calendar offset %s",
     Effect.fn(function* (testCase) {
@@ -249,6 +279,19 @@ describe("Dutch date ranges", () => {
   );
 
   it.effect.each([
+    ["van 4 tot en met 22 januari 2025", "2025-01-04", "2025-01-23"],
+    ["tussen de 4e en de 22e januari 2025", "2025-01-04", "2025-01-23"],
+    ["4–22 januari", "now/y+3d", "now/y+22d"],
+    ["van 4 tot en met 22 van deze maand", "now/M+3d", "now/M+22d"],
+  ] as const)(
+    "maps elided Dutch date range %s",
+    Effect.fn(function* (testCase) {
+      const [input, gte, lt] = testCase;
+      expect(formatFilter((yield* parseDutch(input)).range)).toEqual({ gte, lt });
+    }),
+  );
+
+  it.effect.each([
     ["jan. 2025", "2025-01-01", "2025-02-01"],
     ["mrt 2025", "2025-03-01", "2025-04-01"],
     ["sept. 2025", "2025-09-01", "2025-10-01"],
@@ -297,7 +340,18 @@ describe("Dutch date ranges", () => {
     }),
   );
 
-  it.effect.each(["31 april 2025", "29/2/2025", "13/13/2025", "januari 20"])(
+  it.effect.each([
+    "31 april 2025",
+    "29/2/2025",
+    "13/13/2025",
+    "januari 20",
+    "29 van deze maand",
+    "van 4 tot en met 29 van deze maand",
+    "afgelopen 2 maand",
+    "komende 2 week",
+    "2 dag geleden",
+    "1 weken geleden",
+  ])(
     "rejects invalid Dutch absolute period %j",
     Effect.fn(function* (input) {
       const error = yield* Effect.flip(parseDutch(input));
@@ -316,9 +370,9 @@ describe("Dutch date ranges", () => {
 
   it.effect.each([
     ["volgende m", "volgende maand"],
-    ["janu", "Januari"],
+    ["janu", "januari"],
     ["afgelopen 3 maan", "de afgelopen 3 maanden"],
-    ["vanaf jan", "vanaf Januari"],
+    ["vanaf jan", "vanaf januari"],
   ] as const)(
     "suggests Dutch completion for %j",
     Effect.fn(function* (testCase) {
@@ -330,10 +384,19 @@ describe("Dutch date ranges", () => {
   );
 
   it.effect(
+    "suggests an unambiguous Dutch rolling singular period",
+    Effect.fn(function* () {
+      const [suggestion] = yield* suggestDutch("de afgelopen m");
+      if (suggestion === undefined) return expect.fail("Expected a rolling suggestion");
+      expect(suggestion.text).toBe("sinds een maand");
+    }),
+  );
+
+  it.effect(
     "completes a partial Dutch year",
     Effect.fn(function* () {
       const suggestions = yield* suggestDutch("januari 202", 2);
-      expect(suggestions.map((entry) => entry.text)).toEqual(["Januari 2020", "Januari 2021"]);
+      expect(suggestions.map((entry) => entry.text)).toEqual(["januari 2020", "januari 2021"]);
     }),
   );
 
