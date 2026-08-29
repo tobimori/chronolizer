@@ -605,8 +605,8 @@ const parseEnglish = (input: string) => {
   const boundary = boundaryCandidate(input);
   if (Option.isSome(boundary)) return boundary;
 
-  return Option.map(parsePeriod(input), (period) =>
-    candidate(periodRange(period), period.canonical),
+  return parsePeriod(input).pipe(
+    Option.map((period) => candidate(periodRange(period), period.canonical)),
   );
 };
 

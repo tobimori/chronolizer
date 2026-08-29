@@ -603,11 +603,13 @@ const boundaryCandidate = (input: string) => {
   const included = EffectString.match(/^do (.+) włącznie$/u)(input);
   if (Option.isSome(included)) {
     const period = parsePeriod(textAt(included.value, 1));
-    return Option.map(period, (value) =>
-      periodBoundaryCandidate(
-        value,
-        "through",
-        `do ${withPeriodCase(value.canonical, "genitive")} włącznie`,
+    return period.pipe(
+      Option.map((value) =>
+        periodBoundaryCandidate(
+          value,
+          "through",
+          `do ${withPeriodCase(value.canonical, "genitive")} włącznie`,
+        ),
       ),
     );
   }
@@ -698,8 +700,8 @@ const parsePolish = (input: string) => {
   if (Option.isSome(bounded)) return bounded;
   const boundary = boundaryCandidate(input);
   if (Option.isSome(boundary)) return boundary;
-  return Option.map(parsePeriod(input), (period) =>
-    candidate(periodRange(period), period.canonical),
+  return parsePeriod(input).pipe(
+    Option.map((period) => candidate(periodRange(period), period.canonical)),
   );
 };
 
