@@ -134,6 +134,7 @@ interface UnitForms {
   readonly many: string;
   readonly pastSingular: string;
   readonly pastPlural: string;
+  readonly durationGenitive: string;
   readonly current: string;
   readonly previous: string;
   readonly next: string;
@@ -149,6 +150,7 @@ const units: ReadonlyArray<UnitForms> = [
     many: "dnů",
     pastSingular: "dnem",
     pastPlural: "dny",
+    durationGenitive: "dne",
     current: "dnes",
     previous: "včera",
     next: "zítra",
@@ -162,6 +164,7 @@ const units: ReadonlyArray<UnitForms> = [
     many: "týdnů",
     pastSingular: "týdnem",
     pastPlural: "týdny",
+    durationGenitive: "týdne",
     current: "tento týden",
     previous: "minulý týden",
     next: "příští týden",
@@ -175,6 +178,7 @@ const units: ReadonlyArray<UnitForms> = [
     many: "měsíců",
     pastSingular: "měsícem",
     pastPlural: "měsíci",
+    durationGenitive: "měsíce",
     current: "tento měsíc",
     previous: "minulý měsíc",
     next: "příští měsíc",
@@ -188,6 +192,7 @@ const units: ReadonlyArray<UnitForms> = [
     many: "čtvrtletí",
     pastSingular: "čtvrtletím",
     pastPlural: "čtvrtletími",
+    durationGenitive: "čtvrtletí",
     current: "toto čtvrtletí",
     previous: "minulé čtvrtletí",
     next: "příští čtvrtletí",
@@ -201,6 +206,7 @@ const units: ReadonlyArray<UnitForms> = [
     many: "let",
     pastSingular: "rokem",
     pastPlural: "lety",
+    durationGenitive: "roku",
     current: "tento rok",
     previous: "minulý rok",
     next: "příští rok",
@@ -208,8 +214,6 @@ const units: ReadonlyArray<UnitForms> = [
     remaining: "zbytek roku",
   },
 ];
-
-const title = (value: string) => `${value.slice(0, 1).toLocaleUpperCase("cs")}${value.slice(1)}`;
 
 const unitAliases = [
   ["den", "day"],
@@ -411,9 +415,7 @@ const parseBasePeriod = (input: string) => {
     const month = monthNumber(textAt(monthYear.value, 1));
     const year = validYear(textAt(monthYear.value, 2));
     if (month !== undefined && year !== undefined) {
-      return Option.some(
-        fixedMonthPeriod(year, month, `${title(textAt(months, month - 1))} ${year}`),
-      );
+      return Option.some(fixedMonthPeriod(year, month, `${textAt(months, month - 1)} ${year}`));
     }
   }
 
@@ -435,7 +437,7 @@ const parseBasePeriod = (input: string) => {
         monthOfRelativeYear(
           month,
           direction,
-          `${title(textAt(months, month - 1))} ${relativeYearName(direction)}`,
+          `${textAt(months, month - 1)} ${relativeYearName(direction)}`,
         ),
       );
     }
@@ -444,7 +446,7 @@ const parseBasePeriod = (input: string) => {
   const standaloneMonth = monthNumber(input);
   if (standaloneMonth !== undefined) {
     return Option.some(
-      monthOfRelativeYear(standaloneMonth, 0, title(textAt(months, standaloneMonth - 1))),
+      monthOfRelativeYear(standaloneMonth, 0, textAt(months, standaloneMonth - 1)),
     );
   }
 
@@ -499,6 +501,15 @@ const rollingBarePattern = countedPattern("^([1-9]\\d*) (UNIT)$");
 const firstPatternMatch = (input: string, patterns: ReadonlyArray<RegExp>) =>
   Option.firstSomeOf(patterns.map((pattern) => EffectString.match(pattern)(input)));
 
+const singularRollingPhrases = units.flatMap((entry) => [
+  { phrase: `poslední ${entry.singular}`, entry, future: false },
+  { phrase: `během posledního ${entry.durationGenitive}`, entry, future: false },
+  { phrase: `během následujícího ${entry.durationGenitive}`, entry, future: true },
+]);
+
+const singularRollingCanonical = (entry: UnitForms, future: boolean) =>
+  `během ${future ? "následujícího" : "posledního"} ${entry.durationGenitive}`;
+
 const countNoun = (amount: number, entry: UnitForms) => {
   if (amount === 1) return entry.singular;
   const lastTwo = amount % 100;
@@ -527,6 +538,13 @@ const parseCalendarOffset = (input: string) => {
 };
 
 const parseRollingPeriod = (input: string) => {
+  const singular = singularRollingPhrases.find((entry) => entry.phrase === input);
+  if (singular !== undefined) {
+    const range = singular.future
+      ? futureRange(1, singular.entry.unit)
+      : trailingRange(1, singular.entry.unit);
+    return Option.some(candidate(range, singularRollingCanonical(singular.entry, singular.future)));
+  }
   const since = EffectString.match(rollingSincePattern)(input);
   const past = firstPatternMatch(input, rollingPastPatterns);
   const bare = EffectString.match(rollingBarePattern)(input);
@@ -542,9 +560,34 @@ const parseRollingPeriod = (input: string) => {
   if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
   const isFuture = Option.isSome(future);
   const range = isFuture ? futureRange(amount.value, unit) : trailingRange(amount.value, unit);
+  if (amount.value === 1) {
+    return Option.some(candidate(range, singularRollingCanonical(entry, isFuture)));
+  }
   const modifier = isFuture ? "příští" : "poslední";
   return Option.some(
     candidate(range, `${modifier} ${amount.value} ${countNoun(amount.value, entry)}`),
+  );
+};
+
+const parseElidedDateRange = (input: string) => {
+  const joined = EffectString.match(
+    /^od ([0-3]?\d)\.?(?: do) ([0-3]?\d)\.? ([a-záčďéěíňóřšťúůýž]+\.?)(?: (\d{4}))?$/u,
+  )(input);
+  const dashed = EffectString.match(
+    /^([0-3]?\d)\.?[–—-]([0-3]?\d)\.? ([a-záčďéěíňóřšťúůýž]+\.?)(?: (\d{4}))?$/u,
+  )(input);
+  const match = Option.firstSomeOf([joined, dashed]);
+  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  const lowerDay = textAt(match.value, 1);
+  const upperDay = textAt(match.value, 2);
+  const month = textAt(match.value, 3);
+  const year = textAt(match.value, 4);
+  const suffix = year.length === 0 ? "" : ` ${year}`;
+  return joinedPeriodCandidate(
+    `od ${lowerDay}. ${month}${suffix} do ${upperDay}. ${month}${suffix}`,
+    [["od ", " do "]],
+    parsePeriod,
+    (lower, upper) => `od ${lower} do ${upper} včetně`,
   );
 };
 
@@ -593,6 +636,9 @@ const parseCzech = (input: string) => {
     return Option.some(candidate(periodToDateRange(toDate.entry.unit), toDate.entry.toDate));
   }
 
+  const elided = parseElidedDateRange(input);
+  if (Option.isSome(elided)) return elided;
+
   const nowBounded = joinedNowCandidate(
     input,
     [
@@ -621,8 +667,8 @@ const parseCzech = (input: string) => {
   if (Option.isSome(bounded)) return bounded;
   const boundary = boundaryCandidate(input);
   if (Option.isSome(boundary)) return boundary;
-  return Option.map(parsePeriod(input), (period) =>
-    candidate(periodRange(period), period.canonical),
+  return parsePeriod(input).pipe(
+    Option.map((period) => candidate(periodRange(period), period.canonical)),
   );
 };
 
@@ -667,6 +713,7 @@ const countedSuggestions = (input: string) => {
 const czechSuggestionPhrases = [
   ...units.map((entry) => entry.toDate),
   ...units.map((entry) => entry.remaining),
+  ...singularRollingPhrases.map((entry) => entry.phrase),
   ...staticPeriodPhrases,
   ...prefixNaturalPhrases(staticPeriodPhrases, boundaryPrefixes),
   "dosud",
@@ -704,7 +751,11 @@ const renderCzech = (range: DateRangeExpr) => {
   if (Option.isSome(future)) {
     const entry = units.find((unit) => unit.unit === future.value.unit);
     if (entry !== undefined) {
-      return Option.some(`příští ${future.value.amount} ${countNoun(future.value.amount, entry)}`);
+      return Option.some(
+        future.value.amount === 1
+          ? singularRollingCanonical(entry, true)
+          : `příští ${future.value.amount} ${countNoun(future.value.amount, entry)}`,
+      );
     }
   }
   const trailing = trailingPeriod(range);
@@ -712,7 +763,9 @@ const renderCzech = (range: DateRangeExpr) => {
     const entry = units.find((unit) => unit.unit === trailing.value.unit);
     if (entry !== undefined) {
       return Option.some(
-        `poslední ${trailing.value.amount} ${countNoun(trailing.value.amount, entry)}`,
+        trailing.value.amount === 1
+          ? singularRollingCanonical(entry, false)
+          : `poslední ${trailing.value.amount} ${countNoun(trailing.value.amount, entry)}`,
       );
     }
   }

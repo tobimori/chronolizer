@@ -69,6 +69,23 @@ describe("Czech date ranges", () => {
   );
 
   it.effect.each([
+    ["poslední měsíc", "now-1M", "během posledního měsíce"],
+    ["během posledního týdne", "now-1w", "během posledního týdne"],
+    ["během následujícího roku", "now+1y", "během následujícího roku"],
+  ] as const)(
+    "distinguishes rolling Czech singular period %s",
+    Effect.fn(function* (testCase) {
+      const [input, endpoint, canonical] = testCase;
+      const result = yield* parseCzech(input);
+      const expected = input.includes("následujícího")
+        ? { gte: "now", lte: endpoint }
+        : { gte: endpoint, lte: "now" };
+      expect(formatFilter(result.range)).toEqual(expected);
+      expect(yield* formatNatural(result.range, { locale: "cs" })).toBe(canonical);
+    }, Effect.provide(CzechLanguageLayer)),
+  );
+
+  it.effect.each([
     ["poslední 2 dny", "now-2d"],
     ["poslední 3 týdny", "now-3w"],
     ["poslední 5 měsíců", "now-5M"],
@@ -237,6 +254,17 @@ describe("Czech date ranges", () => {
   );
 
   it.effect.each([
+    ["od 1. do 15. ledna 2025", "2025-01-01", "2025-01-16"],
+    ["1.–15. ledna", "now/y", "now/y+15d"],
+  ] as const)(
+    "maps elided Czech date range %s",
+    Effect.fn(function* (testCase) {
+      const [input, gte, lt] = testCase;
+      expect(formatFilter((yield* parseCzech(input)).range)).toEqual({ gte, lt });
+    }),
+  );
+
+  it.effect.each([
     ["led. 2025", "2025-01-01", "2025-02-01"],
     ["bře 2025", "2025-03-01", "2025-04-01"],
     ["zář 2025", "2025-09-01", "2025-10-01"],
@@ -303,9 +331,9 @@ describe("Czech date ranges", () => {
 
   it.effect.each([
     ["příští m", "příští měsíc"],
-    ["led", "Leden"],
+    ["led", "leden"],
     ["poslední 3 měs", "poslední 3 měsíce"],
-    ["od led", "od Leden"],
+    ["od led", "od leden"],
   ] as const)(
     "suggests Czech completion for %j",
     Effect.fn(function* (testCase) {
@@ -320,8 +348,8 @@ describe("Czech date ranges", () => {
     "completes a partial Czech year",
     Effect.fn(function* () {
       expect((yield* suggestCzech("leden 202", 2)).map((entry) => entry.text)).toEqual([
-        "Leden 2020",
-        "Leden 2021",
+        "leden 2020",
+        "leden 2021",
       ]);
     }),
   );
