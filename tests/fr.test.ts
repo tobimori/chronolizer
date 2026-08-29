@@ -67,6 +67,8 @@ describe("French date ranges", () => {
     "3 mois précédents",
     "3 mois precedents",
     "depuis 3 mois",
+    "au cours des 3 derniers mois",
+    "pendant les 3 derniers mois",
     "3 mois",
   ])(
     "canonicalizes French counted-month variant %j",
@@ -74,6 +76,35 @@ describe("French date ranges", () => {
       const result = yield* parseFrench(input);
       expect(formatFilter(result.range)).toEqual({ gte: "now-3M", lte: "now" });
       expect(yield* formatNatural(result.range, { locale: "fr" })).toBe("les 3 derniers mois");
+    }, Effect.provide(FrenchLanguageLayer)),
+  );
+
+  it.effect.each([
+    ["le dernier mois", "now-1M", "depuis un mois"],
+    ["au cours de la dernière semaine", "now-1w", "depuis une semaine"],
+    ["depuis un an", "now-1y", "depuis un an"],
+    ["la dernière année", "now-1y", "depuis un an"],
+  ] as const)(
+    "distinguishes rolling French singular period %s",
+    Effect.fn(function* (testCase) {
+      const [input, gte, canonical] = testCase;
+      const result = yield* parseFrench(input);
+      expect(formatFilter(result.range)).toEqual({ gte, lte: "now" });
+      expect(yield* formatNatural(result.range, { locale: "fr" })).toBe(canonical);
+    }, Effect.provide(FrenchLanguageLayer)),
+  );
+
+  it.effect.each([
+    ["à partir de maintenant pendant un mois", "now+1M", "à partir de maintenant pendant un mois"],
+    ["pendant la prochaine semaine", "now+1w", "à partir de maintenant pendant une semaine"],
+    ["pendant la prochaine année", "now+1y", "à partir de maintenant pendant un an"],
+  ] as const)(
+    "maps rolling French singular future %s",
+    Effect.fn(function* (testCase) {
+      const [input, lte, canonical] = testCase;
+      const result = yield* parseFrench(input);
+      expect(formatFilter(result.range)).toEqual({ gte: "now", lte });
+      expect(yield* formatNatural(result.range, { locale: "fr" })).toBe(canonical);
     }, Effect.provide(FrenchLanguageLayer)),
   );
 
@@ -106,10 +137,24 @@ describe("French date ranges", () => {
   );
 
   it.effect.each([
+    ["les 2 dernières années", "les 2 dernières années"],
+    ["les 2 prochaines semaines", "les 2 prochaines semaines"],
+  ] as const)(
+    "renders French counted agreement for %s",
+    Effect.fn(function* (testCase) {
+      const [input, canonical] = testCase;
+      const result = yield* parseFrench(input);
+      expect(yield* formatNatural(result.range, { locale: "fr" })).toBe(canonical);
+    }, Effect.provide(FrenchLanguageLayer)),
+  );
+
+  it.effect.each([
     ["il y a 30 mois", "now-30M/M", "now-30M/M+1M", "il y a 30 mois"],
     ["dans 2 semaines", "now+2w/w", "now+2w/w+1w", "dans 2 semaines"],
     ["dans 3 ans", "now+3y/y", "now+3y/y+1y", "dans 3 ans"],
     ["il y a 1 jour", "now-1d/d", "now-1d/d+1d", "hier"],
+    ["il y a un mois", "now-1M/M", "now-1M/M+1M", "le mois dernier"],
+    ["dans une semaine", "now+1w/w", "now+1w/w+1w", "la semaine prochaine"],
   ] as const)(
     "maps French calendar offset %s",
     Effect.fn(function* (testCase) {
@@ -221,6 +266,7 @@ describe("French date ranges", () => {
     ["jusqu'à janvier 2025", { lt: "2025-02-01" }],
     ["jusqu'avant janvier 2025", { lt: "2025-01-01" }],
     ["jusqu'à janvier 2025 inclus", { lt: "2025-02-01" }],
+    ["jusqu'au mois prochain", { lt: "now+1M/M+1M" }],
     ["après janvier 2025", { gte: "2025-02-01" }],
     ["depuis maintenant", { gte: "now" }],
     ["jusqu'à maintenant", { lte: "now" }],
@@ -248,6 +294,32 @@ describe("French date ranges", () => {
   );
 
   it.effect.each([
+    ["du 4 au 22 janvier 2025", "2025-01-04", "2025-01-23"],
+    ["entre le 4 et le 22 janvier, 2025", "2025-01-04", "2025-01-23"],
+    ["4–22 janvier 2025", "2025-01-04", "2025-01-23"],
+    ["du 4 au 22 de ce mois", "now/M+3d", "now/M+22d"],
+    ["entre le 4 et le 22 du mois dernier", "now-1M/M+3d", "now-1M/M+22d"],
+  ] as const)(
+    "maps elided French date range %s",
+    Effect.fn(function* (testCase) {
+      const [input, gte, lt] = testCase;
+      expect(formatFilter((yield* parseFrench(input)).range)).toEqual({ gte, lt });
+    }),
+  );
+
+  it.effect(
+    "renders French contractions in boundaries and ranges",
+    Effect.fn(function* () {
+      const boundary = yield* parseFrench("jusqu'au mois prochain");
+      const range = yield* parseFrench("de février 2024 à mars 2024");
+      expect(yield* formatNatural(boundary.range, { locale: "fr" })).toBe("jusqu'au mois prochain");
+      expect(yield* formatNatural(range.range, { locale: "fr" })).toBe(
+        "de février 2024 à mars 2024",
+      );
+    }, Effect.provide(FrenchLanguageLayer)),
+  );
+
+  it.effect.each([
     ["janv. 2025", "2025-01-01", "2025-02-01"],
     ["fevr. 2025", "2025-02-01", "2025-03-01"],
     ["aout 2025", "2025-08-01", "2025-09-01"],
@@ -261,15 +333,17 @@ describe("French date ranges", () => {
   );
 
   it.effect.each([
-    ["début de cette année", "now/y", "now/y+1d"],
-    ["debut du mois prochain", "now+1M/M", "now+1M/M+1d"],
-    ["fin de l'année dernière", "now-1y/y+1y-1d", "now-1y/y+1y"],
+    ["début de cette année", "now/y", "now/y+1d", "début de cette année"],
+    ["debut du mois prochain", "now+1M/M", "now+1M/M+1d", "début du mois prochain"],
+    ["fin de l'année dernière", "now-1y/y+1y-1d", "now-1y/y+1y", "fin de l'année dernière"],
   ] as const)(
     "maps French period edge %s",
     Effect.fn(function* (testCase) {
-      const [input, gte, lt] = testCase;
-      expect(formatFilter((yield* parseFrench(input)).range)).toEqual({ gte, lt });
-    }),
+      const [input, gte, lt, canonical] = testCase;
+      const result = yield* parseFrench(input);
+      expect(formatFilter(result.range)).toEqual({ gte, lt });
+      expect(yield* formatNatural(result.range, { locale: "fr" })).toBe(canonical);
+    }, Effect.provide(FrenchLanguageLayer)),
   );
 
   it.effect.each([
@@ -296,7 +370,18 @@ describe("French date ranges", () => {
     }),
   );
 
-  it.effect.each(["31 avril 2025", "29/2/2025", "13/13/2025", "janvier 20"])(
+  it.effect.each([
+    "31 avril 2025",
+    "29/2/2025",
+    "13/13/2025",
+    "janvier 20",
+    "29 de ce mois",
+    "du 4 au 29 de ce mois",
+    "les 2 derniers semaines",
+    "les 2 dernières mois",
+    "il y a 2 semaine",
+    "dans 1 semaines",
+  ])(
     "rejects invalid French absolute period %j",
     Effect.fn(function* (input) {
       const error = yield* Effect.flip(parseFrench(input));
@@ -325,9 +410,9 @@ describe("French date ranges", () => {
 
   it.effect.each([
     ["le mois pro", "le mois prochain"],
-    ["janv", "Janvier"],
+    ["janv", "janvier"],
     ["3 derniers moi", "les 3 derniers mois"],
-    ["depuis jan", "depuis Janvier"],
+    ["depuis jan", "depuis janvier"],
   ] as const)(
     "suggests French completion for %j",
     Effect.fn(function* (testCase) {
@@ -339,10 +424,23 @@ describe("French date ranges", () => {
   );
 
   it.effect(
+    "uses French gender in singular suggestions",
+    Effect.fn(function* () {
+      const [past] = yield* suggestFrench("la dernière s");
+      const [future] = yield* suggestFrench("pendant la prochaine a");
+      if (past === undefined || future === undefined) {
+        return expect.fail("Expected gender-aware suggestions");
+      }
+      expect(past.text).toBe("depuis une semaine");
+      expect(future.text).toBe("à partir de maintenant pendant un an");
+    }),
+  );
+
+  it.effect(
     "completes a partial French year",
     Effect.fn(function* () {
       const suggestions = yield* suggestFrench("janvier 202", 2);
-      expect(suggestions.map((entry) => entry.text)).toEqual(["Janvier 2020", "Janvier 2021"]);
+      expect(suggestions.map((entry) => entry.text)).toEqual(["janvier 2020", "janvier 2021"]);
     }),
   );
 
