@@ -67,6 +67,12 @@ export const periodStartDay = (period: Period, canonical: string) =>
 export const periodEndDay = (period: Period, canonical: string) =>
   Period.make({ start: shift(period.end, -1, "day"), end: period.end, canonical });
 
+export const periodDay = (period: Period, day: number, canonical: string) => {
+  if (!Number.isInteger(day) || day < 1 || day > 28) return Option.none<Period>();
+  const start = day === 1 ? period.start : shift(period.start, day - 1, "day");
+  return Option.some(Period.make({ start, end: shift(start, 1, "day"), canonical }));
+};
+
 export const periodPreviousDay = (period: Period, canonical: string) =>
   Period.make({ start: shift(period.start, -1, "day"), end: period.start, canonical });
 

@@ -34,6 +34,8 @@ import {
   namedDatePeriod,
   openBoundaryCandidate,
   parseTrailingCount,
+  periodBoundaryCandidate,
+  periodDay,
   periodEndDay,
   periodRange,
   periodsFromPhrases,
@@ -86,6 +88,7 @@ interface UnitForms {
   readonly unit: Unit;
   readonly singular: string;
   readonly plural: string;
+  readonly gender: "masculine" | "feminine";
   readonly current: string;
   readonly previous: string;
   readonly next: string;
@@ -98,6 +101,7 @@ const units: ReadonlyArray<UnitForms> = [
     unit: "day",
     singular: "día",
     plural: "días",
+    gender: "masculine",
     current: "hoy",
     previous: "ayer",
     next: "mañana",
@@ -108,6 +112,7 @@ const units: ReadonlyArray<UnitForms> = [
     unit: "week",
     singular: "semana",
     plural: "semanas",
+    gender: "feminine",
     current: "esta semana",
     previous: "la semana pasada",
     next: "la próxima semana",
@@ -118,6 +123,7 @@ const units: ReadonlyArray<UnitForms> = [
     unit: "month",
     singular: "mes",
     plural: "meses",
+    gender: "masculine",
     current: "este mes",
     previous: "el mes pasado",
     next: "el próximo mes",
@@ -128,6 +134,7 @@ const units: ReadonlyArray<UnitForms> = [
     unit: "quarter",
     singular: "trimestre",
     plural: "trimestres",
+    gender: "masculine",
     current: "este trimestre",
     previous: "el trimestre pasado",
     next: "el próximo trimestre",
@@ -138,6 +145,7 @@ const units: ReadonlyArray<UnitForms> = [
     unit: "year",
     singular: "año",
     plural: "años",
+    gender: "masculine",
     current: "este año",
     previous: "el año pasado",
     next: "el próximo año",
@@ -146,23 +154,44 @@ const units: ReadonlyArray<UnitForms> = [
   },
 ];
 
-const title = (value: string) => `${value.slice(0, 1).toLocaleUpperCase("es")}${value.slice(1)}`;
+const gendered = (entry: UnitForms, masculine: string, feminine: string) =>
+  entry.gender === "feminine" ? feminine : masculine;
+
+const definiteArticle = (entry: UnitForms, plural = false) =>
+  gendered(entry, plural ? "los" : "el", plural ? "las" : "la");
+
+const indefiniteArticle = (entry: UnitForms) => gendered(entry, "un", "una");
+
+const withDe = (period: string) =>
+  period.startsWith("el ") ? `del ${period.slice(3)}` : `de ${period}`;
+
+const afterDe = (period: string) => {
+  if (period.startsWith("del ")) return `el ${period.slice(4)}`;
+  return period.startsWith("de ") ? period.slice(3) : period;
+};
+
+const rollingAdjective = (entry: UnitForms, future: boolean, plural: boolean) => {
+  if (future)
+    return gendered(entry, plural ? "próximos" : "próximo", plural ? "próximas" : "próxima");
+  return gendered(entry, plural ? "últimos" : "último", plural ? "últimas" : "última");
+};
 
 const unitAliases = [
-  ["día", "day"],
-  ["dias", "day"],
-  ["días", "day"],
-  ["semana", "week"],
-  ["semanas", "week"],
-  ["mes", "month"],
-  ["meses", "month"],
-  ["trimestre", "quarter"],
-  ["trimestres", "quarter"],
-  ["año", "year"],
-  ["ano", "year"],
-  ["años", "year"],
-  ["anos", "year"],
-] as const satisfies ReadonlyArray<readonly [string, Unit]>;
+  ["día", "day", false],
+  ["dia", "day", false],
+  ["días", "day", true],
+  ["dias", "day", true],
+  ["semana", "week", false],
+  ["semanas", "week", true],
+  ["mes", "month", false],
+  ["meses", "month", true],
+  ["trimestre", "quarter", false],
+  ["trimestres", "quarter", true],
+  ["año", "year", false],
+  ["ano", "year", false],
+  ["años", "year", true],
+  ["anos", "year", true],
+] as const satisfies ReadonlyArray<readonly [string, Unit, boolean]>;
 
 const periodAliases = [
   ...units.flatMap((entry) => [
@@ -170,6 +199,26 @@ const periodAliases = [
     [entry.previous, entry.unit, -1, entry.previous] as const,
     [entry.next, entry.unit, 1, entry.next] as const,
   ]),
+  ...units
+    .filter((entry) => entry.unit !== "day")
+    .flatMap((entry) => [
+      [`${entry.singular} actual`, entry.unit, 0, entry.current] as const,
+      [
+        `${definiteArticle(entry)} ${entry.singular} anterior`,
+        entry.unit,
+        -1,
+        entry.previous,
+      ] as const,
+      [`${entry.singular} anterior`, entry.unit, -1, entry.previous] as const,
+      [`${definiteArticle(entry)} ${entry.singular} siguiente`, entry.unit, 1, entry.next] as const,
+      [`${entry.singular} siguiente`, entry.unit, 1, entry.next] as const,
+      [
+        `${rollingAdjective(entry, true, false)} ${entry.singular}`,
+        entry.unit,
+        1,
+        entry.next,
+      ] as const,
+    ]),
   ["semana pasada", "week", -1, "la semana pasada"],
   ["semana que viene", "week", 1, "la próxima semana"],
   ["la semana que viene", "week", 1, "la próxima semana"],
@@ -188,7 +237,11 @@ const periodAliases = [
   ["trimestre pasado", "quarter", -1, "el trimestre pasado"],
   ["proximo trimestre", "quarter", 1, "el próximo trimestre"],
   ["anteayer", "day", -2, "anteayer"],
+  ["día antes de ayer", "day", -2, "anteayer"],
+  ["el día antes de ayer", "day", -2, "anteayer"],
   ["pasado mañana", "day", 2, "pasado mañana"],
+  ["día después de mañana", "day", 2, "pasado mañana"],
+  ["el día después de mañana", "day", 2, "pasado mañana"],
   ["la semana anterior a la pasada", "week", -2, "la semana anterior a la pasada"],
   ["la semana después de la próxima", "week", 2, "la semana después de la próxima"],
   ["el mes anterior al pasado", "month", -2, "el mes anterior al pasado"],
@@ -240,9 +293,9 @@ const monthNumber = (value: string) => {
 const currentDateLabel = (day: number, month: number) => `${day} de ${textAt(months, month - 1)}`;
 
 const parseNamedDate = (input: string) => {
-  const named = EffectString.match(/^([0-3]?\d)(?: de)? ([a-záéíóúñ]+\.?)(?: de)? (\d{4})$/u)(
-    input,
-  );
+  const named = EffectString.match(
+    /^(?:el (?:día )?)?([0-3]?\d)(?: de)? ([a-záéíóúñ]+\.?)(?:(?: de| del)? (\d{4}))$/u,
+  )(input);
   if (Option.isSome(named)) {
     return namedDatePeriod(
       textAt(named.value, 3),
@@ -267,15 +320,26 @@ const parseNamedDate = (input: string) => {
     }
   }
 
-  const current = EffectString.match(/^([0-3]?\d)(?: de)? ([a-záéíóúñ]+\.?)$/u)(input);
-  return Option.isSome(current)
-    ? namedCurrentYearDatePeriod(
-        textAt(current.value, 2),
-        textAt(current.value, 1),
-        monthNumber,
-        currentDateLabel,
-      )
-    : Option.none<Period>();
+  const current = EffectString.match(/^(?:el (?:día )?)?([0-3]?\d)(?: de)? ([a-záéíóúñ]+\.?)$/u)(
+    input,
+  );
+  if (Option.isSome(current)) {
+    return namedCurrentYearDatePeriod(
+      textAt(current.value, 2),
+      textAt(current.value, 1),
+      monthNumber,
+      currentDateLabel,
+    );
+  }
+
+  const relative = EffectString.match(/^(?:el (?:día )?)?([0-3]?\d) (de .+|del .+)$/u)(input);
+  if (Option.isNone(relative)) return Option.none<Period>();
+  const periodText = afterDe(textAt(relative.value, 2));
+  const alias = periodAliases.find((entry) => entry[0] === periodText && entry[1] === "month");
+  if (alias === undefined) return Option.none<Period>();
+  const day = Number(textAt(relative.value, 1));
+  const month = relativePeriod(alias[1], alias[2], alias[3]);
+  return periodDay(month, day, `${day} ${withDe(alias[3])}`);
 };
 
 const quarterNumber = (value: string) => {
@@ -339,9 +403,7 @@ const parseBasePeriod = (input: string) => {
     const month = monthNumber(textAt(monthYear.value, 1));
     const year = validYear(textAt(monthYear.value, 2));
     if (month !== undefined && year !== undefined) {
-      return Option.some(
-        fixedMonthPeriod(year, month, `${title(textAt(months, month - 1))} de ${year}`),
-      );
+      return Option.some(fixedMonthPeriod(year, month, `${textAt(months, month - 1)} de ${year}`));
     }
   }
 
@@ -355,11 +417,7 @@ const parseBasePeriod = (input: string) => {
     if (month !== undefined) {
       const canonicalYear = relativeYearName(direction);
       return Option.some(
-        monthOfRelativeYear(
-          month,
-          direction,
-          `${title(textAt(months, month - 1))} del ${canonicalYear}`,
-        ),
+        monthOfRelativeYear(month, direction, `${textAt(months, month - 1)} del ${canonicalYear}`),
       );
     }
   }
@@ -367,7 +425,7 @@ const parseBasePeriod = (input: string) => {
   const standaloneMonth = monthNumber(input);
   if (standaloneMonth !== undefined) {
     return Option.some(
-      monthOfRelativeYear(standaloneMonth, 0, title(textAt(months, standaloneMonth - 1))),
+      monthOfRelativeYear(standaloneMonth, 0, textAt(months, standaloneMonth - 1)),
     );
   }
 
@@ -401,7 +459,7 @@ const parsePeriod = (input: string) => {
     const period = parseBasePeriod(textAt(edge.value, 2));
     if (Option.isSome(period)) {
       const isEnd = edgeName === "fin" || edgeName === "final";
-      const canonical = `${isEnd ? "final" : "inicio"} de ${period.value.canonical}`;
+      const canonical = `${isEnd ? "final" : "inicio"} ${withDe(period.value.canonical)}`;
       return Option.some(
         isEnd ? periodEndDay(period.value, canonical) : periodStartDay(period.value, canonical),
       );
@@ -413,59 +471,204 @@ const parsePeriod = (input: string) => {
   return parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
 };
 
-const countedUnit = (value: string) => unitAliases.find((entry) => entry[0] === value)?.[1];
-
-const parseCalendarOffset = (input: string) => {
-  const past = EffectString.match(
-    /^hace ([1-9]\d*) (día|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
-  )(input);
-  const future = EffectString.match(
-    /^(?:dentro de|en) ([1-9]\d*) (día|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
-  )(input);
-  const match = Option.firstSomeOf([past, future]);
-  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
-  const amount = parseTrailingCount(textAt(match.value, 1));
-  const unit = countedUnit(textAt(match.value, 2));
-  if (Option.isNone(amount) || unit === undefined) {
-    return Option.none<ReturnType<typeof candidate>>();
-  }
-  const entry = units.find((item) => item.unit === unit);
-  if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
-  const direction = Option.isSome(past) ? -amount.value : amount.value;
-  const canonical =
-    direction < 0
-      ? `hace ${amount.value} ${amount.value === 1 ? entry.singular : entry.plural}`
-      : `dentro de ${amount.value} ${amount.value === 1 ? entry.singular : entry.plural}`;
-  return Option.some(candidate(periodRange(relativePeriod(unit, direction, canonical)), canonical));
+const countedUnit = (value: string, amount: number) => {
+  const alias = unitAliases.find((entry) => entry[0] === value && entry[2] === (amount !== 1));
+  return alias === undefined ? undefined : units.find((entry) => entry.unit === alias[1]);
 };
 
-const parseRollingPeriod = (input: string) => {
-  const sinceAgo = EffectString.match(
-    /^desde hace ([1-9]\d*) (día|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
+const writtenAmount = (value: string) =>
+  value === "un" || value === "una" ? Option.some(1) : parseTrailingCount(value);
+
+const agreesWithArticle = (entry: UnitForms, article: string, plural = false) =>
+  article.length === 0 || article === definiteArticle(entry, plural);
+
+const agreesWithIndefiniteArticle = (entry: UnitForms, article: string) =>
+  article === indefiniteArticle(entry);
+
+const withoutAcute = (value: string) => value.normalize("NFD").replaceAll("\u0301", "");
+
+const agreesWithRollingModifier = (entry: UnitForms, modifier: string, future: boolean) => {
+  if (modifier === "anteriores" || modifier === "siguientes") return true;
+  if (!future && modifier === gendered(entry, "pasados", "pasadas")) return true;
+  const expected = rollingAdjective(entry, future, true);
+  return modifier === expected || modifier === withoutAcute(expected);
+};
+
+const agreesWithSingularModifier = (
+  entry: UnitForms | undefined,
+  modifier: string,
+  future: boolean,
+) => {
+  if (entry === undefined) return false;
+  if (future && modifier === "siguiente") return true;
+  const expected = rollingAdjective(entry, future, false);
+  return modifier === expected || modifier === withoutAcute(expected);
+};
+
+const parseCalendarOffset = (input: string) => {
+  const match = EffectString.match(
+    /^(hace|dentro de|en) ([1-9]\d*|un|una) (día|dia|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
   )(input);
-  const past = EffectString.match(
-    /^(?:(?:los|las) )?(?:últimos|ultimos|últimas|ultimas|pasados|pasadas|anteriores) ([1-9]\d*) (día|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
-  )(input);
-  const bare = EffectString.match(
-    /^([1-9]\d*) (día|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
-  )(input);
-  const future = EffectString.match(
-    /^(?:(?:los|las) )?(?:próximos|proximos|próximas|proximas|siguientes) ([1-9]\d*) (día|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
-  )(input);
-  const match = Option.firstSomeOf([sinceAgo, past, bare, future]);
   if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
-  const amount = parseTrailingCount(textAt(match.value, 1));
-  const unit = countedUnit(textAt(match.value, 2));
-  if (Option.isNone(amount) || unit === undefined) {
+  const amount = writtenAmount(textAt(match.value, 2));
+  if (Option.isNone(amount)) return Option.none<ReturnType<typeof candidate>>();
+  const entry = countedUnit(textAt(match.value, 3), amount.value);
+  const amountText = textAt(match.value, 2);
+  if (
+    entry === undefined ||
+    ((amountText === "un" || amountText === "una") &&
+      !agreesWithIndefiniteArticle(entry, amountText))
+  ) {
     return Option.none<ReturnType<typeof candidate>>();
   }
-  const entry = units.find((item) => item.unit === unit);
-  if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
-  const isFuture = Option.isSome(future);
-  const range = isFuture ? futureRange(amount.value, unit) : trailingRange(amount.value, unit);
-  const direction = isFuture ? "próximos" : "últimos";
+  const isPast = textAt(match.value, 1) === "hace";
+  const quantity = amount.value === 1 ? indefiniteArticle(entry) : String(amount.value);
   const noun = amount.value === 1 ? entry.singular : entry.plural;
-  return Option.some(candidate(range, `${direction} ${amount.value} ${noun}`));
+  const canonical = `${isPast ? "hace" : "dentro de"} ${quantity} ${noun}`;
+  const direction = isPast ? -amount.value : amount.value;
+  return Option.some(
+    candidate(periodRange(relativePeriod(entry.unit, direction, canonical)), canonical),
+  );
+};
+
+const rollingCanonical = (entry: UnitForms, amount: number, future: boolean) => {
+  if (amount > 1) {
+    return `${rollingAdjective(entry, future, true)} ${amount} ${entry.plural}`;
+  }
+  const article = indefiniteArticle(entry);
+  return future
+    ? `desde ahora durante ${article} ${entry.singular}`
+    : `desde hace ${article} ${entry.singular}`;
+};
+
+const rollingCandidate = (entry: UnitForms, amount: number, future: boolean) =>
+  candidate(
+    future ? futureRange(amount, entry.unit) : trailingRange(amount, entry.unit),
+    rollingCanonical(entry, amount, future),
+  );
+
+const parseRollingPeriod = (input: string) => {
+  const since = EffectString.match(
+    /^desde hace ([1-9]\d*|un|una) (día|dia|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
+  )(input);
+  if (Option.isSome(since)) {
+    const amount = writtenAmount(textAt(since.value, 1));
+    if (Option.isSome(amount)) {
+      const entry = countedUnit(textAt(since.value, 2), amount.value);
+      const amountText = textAt(since.value, 1);
+      if (
+        entry !== undefined &&
+        ((amountText !== "un" && amountText !== "una") ||
+          agreesWithIndefiniteArticle(entry, amountText))
+      ) {
+        return Option.some(rollingCandidate(entry, amount.value, false));
+      }
+    }
+  }
+
+  const futureSingular = EffectString.match(
+    /^desde ahora durante (un|una) (día|dia|semana|mes|trimestre|año|ano)$/u,
+  )(input);
+  if (Option.isSome(futureSingular)) {
+    const entry = countedUnit(textAt(futureSingular.value, 2), 1);
+    if (
+      entry !== undefined &&
+      agreesWithIndefiniteArticle(entry, textAt(futureSingular.value, 1))
+    ) {
+      return Option.some(rollingCandidate(entry, 1, true));
+    }
+  }
+
+  const lastSingular = EffectString.match(
+    /^(?:(?:durante|en) )?(?:este )?(?:(el|la) )?(último|ultimo|última|ultima) (día|dia|semana|mes|trimestre|año|ano)$/u,
+  )(input);
+  if (Option.isSome(lastSingular)) {
+    const entry = countedUnit(textAt(lastSingular.value, 3), 1);
+    const modifier = textAt(lastSingular.value, 2);
+    if (
+      entry !== undefined &&
+      agreesWithArticle(entry, textAt(lastSingular.value, 1)) &&
+      agreesWithSingularModifier(entry, modifier, false)
+    ) {
+      return Option.some(rollingCandidate(entry, 1, false));
+    }
+  }
+
+  const nextSingular = EffectString.match(
+    /^durante (el|la) (próximo|proximo|próxima|proxima|siguiente) (día|dia|semana|mes|trimestre|año|ano)$/u,
+  )(input);
+  if (Option.isSome(nextSingular)) {
+    const entry = countedUnit(textAt(nextSingular.value, 3), 1);
+    const modifier = textAt(nextSingular.value, 2);
+    if (
+      entry !== undefined &&
+      agreesWithArticle(entry, textAt(nextSingular.value, 1)) &&
+      agreesWithSingularModifier(entry, modifier, true)
+    ) {
+      return Option.some(rollingCandidate(entry, 1, true));
+    }
+  }
+
+  const counted = EffectString.match(
+    /^(?:(?:durante|en) )?(?:(los|las) )?(últimos|ultimos|últimas|ultimas|pasados|pasadas|anteriores|próximos|proximos|próximas|proximas|siguientes) ([1-9]\d*) (día|dia|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
+  )(input);
+  if (Option.isSome(counted)) {
+    const amount = parseTrailingCount(textAt(counted.value, 3));
+    if (Option.isSome(amount) && amount.value > 1) {
+      const entry = countedUnit(textAt(counted.value, 4), amount.value);
+      const modifier = textAt(counted.value, 2);
+      const future =
+        modifier.startsWith("próxim") || modifier.startsWith("proxim") || modifier === "siguientes";
+      if (
+        entry !== undefined &&
+        agreesWithArticle(entry, textAt(counted.value, 1), true) &&
+        agreesWithRollingModifier(entry, modifier, future)
+      ) {
+        return Option.some(rollingCandidate(entry, amount.value, future));
+      }
+    }
+  }
+
+  const bare = EffectString.match(
+    /^([1-9]\d*) (día|dia|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
+  )(input);
+  if (Option.isNone(bare)) return Option.none<ReturnType<typeof candidate>>();
+  const amount = parseTrailingCount(textAt(bare.value, 1));
+  if (Option.isNone(amount)) return Option.none<ReturnType<typeof candidate>>();
+  const entry = countedUnit(textAt(bare.value, 2), amount.value);
+  return entry === undefined
+    ? Option.none<ReturnType<typeof candidate>>()
+    : Option.some(rollingCandidate(entry, amount.value, false));
+};
+
+const parseElidedDateRange = (input: string) => {
+  const joined = EffectString.match(
+    /^(?:(?:del|desde(?: el)?) ([0-3]?\d) (?:al|hasta(?: el)?)|entre(?: el)? ([0-3]?\d) y(?: el)?) ([0-3]?\d) (.+)$/u,
+  )(input);
+  const dashed = EffectString.match(/^([0-3]?\d)[–—-]([0-3]?\d) (.+)$/u)(input);
+  const match = Option.firstSomeOf([joined, dashed]);
+  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  const isJoined = Option.isSome(joined);
+  const lowerDay = textAt(match.value, 1) || textAt(match.value, 2);
+  const upperDay = textAt(match.value, isJoined ? 3 : 2);
+  const period = afterDe(textAt(match.value, isJoined ? 4 : 3));
+  return joinedPeriodCandidate(
+    `desde ${lowerDay} ${withDe(period)} hasta ${upperDay} ${withDe(period)}`,
+    [["desde ", " hasta "]],
+    parsePeriod,
+    (lower, upper) => `desde ${lower} hasta ${upper}`,
+  );
+};
+
+const inclusiveBoundaryCandidate = (input: string) => {
+  const match = EffectString.match(/^hasta (.+) inclusive$/u)(input);
+  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  const period = parsePeriod(textAt(match.value, 1));
+  return period.pipe(
+    Option.map((value) =>
+      periodBoundaryCandidate(value, "through", `hasta ${value.canonical} inclusive`),
+    ),
+  );
 };
 
 const boundaryCandidate = (input: string) =>
@@ -508,6 +711,9 @@ const parseSpanish = (input: string) => {
     return Option.some(candidate(periodToDateRange(toDate.entry.unit), toDate.entry.toDate));
   }
 
+  const elided = parseElidedDateRange(input);
+  if (Option.isSome(elided)) return elided;
+
   const nowBounded = joinedNowCandidate(
     input,
     [
@@ -515,7 +721,7 @@ const parseSpanish = (input: string) => {
       ["desde ", " hasta hoy"],
       ["entre ", " y hoy"],
     ],
-    ["desde ahora hasta ", "desde hoy hasta ", "entre hoy y "],
+    ["desde ahora hasta ", "desde hoy hasta ", "entre hoy y ", "entre hoy y el "],
     parsePeriod,
     (period) => `desde ${period} hasta ahora`,
     (period) => `desde ahora hasta ${period}`,
@@ -525,8 +731,11 @@ const parseSpanish = (input: string) => {
   const bounded = joinedPeriodCandidate(
     input,
     [
+      ["desde el ", " hasta el "],
       ["desde ", " hasta "],
+      ["del ", " al "],
       ["de ", " a "],
+      ["entre el ", " y el "],
       ["entre ", " y "],
       ["", " - "],
       ["", " – "],
@@ -537,21 +746,35 @@ const parseSpanish = (input: string) => {
     (lower, upper) => `desde ${lower} hasta ${upper}`,
   );
   if (Option.isSome(bounded)) return bounded;
+  const inclusive = inclusiveBoundaryCandidate(input);
+  if (Option.isSome(inclusive)) return inclusive;
   const boundary = boundaryCandidate(input);
   if (Option.isSome(boundary)) return boundary;
-  return Option.map(parsePeriod(input), (period) =>
-    candidate(periodRange(period), period.canonical),
+  return parsePeriod(input).pipe(
+    Option.map((period) => candidate(periodRange(period), period.canonical)),
   );
 };
 
-const staticPeriodPhrases = [
-  ...periodAliases.map((entry) => entry[0]),
+const weekendPhrases = [
   "este fin de semana",
   "el fin de semana pasado",
   "el próximo fin de semana",
   "el fin de semana anterior al pasado",
   "el fin de semana después del próximo",
-  ...periodAliases.flatMap((entry) => [`inicio de ${entry[0]}`, `final de ${entry[0]}`]),
+];
+
+const edgePeriodPhrases = [
+  ...units
+    .filter((entry) => entry.unit !== "day")
+    .flatMap((entry) => [entry.current, entry.previous, entry.next]),
+  ...weekendPhrases,
+  ...months,
+].flatMap((period) => [`inicio ${withDe(period)}`, `final ${withDe(period)}`]);
+
+const staticPeriodPhrases = [
+  ...periodAliases.map((entry) => entry[0]),
+  ...weekendPhrases,
+  ...edgePeriodPhrases,
   ...[1, 2, 3, 4].flatMap((quarter) => [
     `t${quarter}`,
     `t${quarter} de este año`,
@@ -562,17 +785,28 @@ const staticPeriodPhrases = [
 ];
 
 const staticPeriods = periodsFromPhrases(staticPeriodPhrases, parsePeriod);
-const boundaryPrefixes = ["desde ", "antes de ", "hasta ", "después de "];
+const boundaryPrefixes = ["desde ", "a partir de ", "antes de ", "hasta ", "después de "];
 
 const countedSuggestions = (input: string) => {
   const amount = naturalCount(input);
   if (amount === undefined) return [];
   return units.flatMap((entry) => {
     const noun = amount === 1 ? entry.singular : entry.plural;
+    if (amount === 1) {
+      const article = indefiniteArticle(entry);
+      return [
+        `${amount} ${noun}`,
+        `${rollingAdjective(entry, false, false)} ${noun}`,
+        `desde hace ${article} ${noun}`,
+        `desde ahora durante ${article} ${noun}`,
+        `hace ${article} ${noun}`,
+        `dentro de ${article} ${noun}`,
+      ];
+    }
     return [
-      `últimos ${amount} ${noun}`,
+      `${rollingAdjective(entry, false, true)} ${amount} ${noun}`,
       `${amount} ${noun}`,
-      `próximos ${amount} ${noun}`,
+      `${rollingAdjective(entry, true, true)} ${amount} ${noun}`,
       `hace ${amount} ${noun}`,
       `dentro de ${amount} ${noun}`,
     ];
@@ -582,6 +816,12 @@ const countedSuggestions = (input: string) => {
 const spanishSuggestionPhrases = [
   ...units.map((entry) => entry.toDate),
   ...units.map((entry) => entry.remaining),
+  ...units.flatMap((entry) => [
+    `${rollingAdjective(entry, false, false)} ${entry.singular}`,
+    `desde hace ${indefiniteArticle(entry)} ${entry.singular}`,
+    `desde ahora durante ${indefiniteArticle(entry)} ${entry.singular}`,
+    `durante ${definiteArticle(entry)} ${rollingAdjective(entry, true, false)} ${entry.singular}`,
+  ]),
   ...staticPeriodPhrases,
   ...prefixNaturalPhrases(staticPeriodPhrases, boundaryPrefixes),
   "hasta ahora",
@@ -618,16 +858,14 @@ const renderSpanish = (range: DateRangeExpr) => {
   if (Option.isSome(future)) {
     const entry = units.find((unit) => unit.unit === future.value.unit);
     if (entry !== undefined) {
-      const noun = future.value.amount === 1 ? entry.singular : entry.plural;
-      return Option.some(`próximos ${future.value.amount} ${noun}`);
+      return Option.some(rollingCanonical(entry, future.value.amount, true));
     }
   }
   const trailing = trailingPeriod(range);
   if (Option.isSome(trailing)) {
     const entry = units.find((unit) => unit.unit === trailing.value.unit);
     if (entry !== undefined) {
-      const noun = trailing.value.amount === 1 ? entry.singular : entry.plural;
-      return Option.some(`últimos ${trailing.value.amount} ${noun}`);
+      return Option.some(rollingCanonical(entry, trailing.value.amount, false));
     }
   }
   const periods = [
