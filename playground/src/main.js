@@ -84,6 +84,7 @@ const joinOrNone = (entries, render) => {
 const renderResult = ({ parsed, natural, filter }) => {
   canonical.textContent = natural;
   quality.textContent = parsed.quality;
+  quality.dataset.quality = parsed.quality;
   filterOutput.textContent = JSON.stringify(filter, null, 2);
   corrections.textContent = joinOrNone(
     parsed.corrections,

@@ -1,8 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
     <meta
       name="description"
       content="Try Chronolizer natural-language date ranges in your browser."
@@ -10,47 +11,53 @@
     <title>Chronolizer Playground</title>
   </head>
   <body>
+    <div class="page-grid" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="/" aria-label="Chronolizer playground">chronolizer</a>
+        <nav aria-label="Project links">
+          <span>Built with Effect 4</span>
+          <a href="https://github.com/tobimori/chronolizer">GitHub <span>↗</span></a>
+        </nav>
+      </div>
+    </header>
+
     <main class="shell">
-      <header class="page-header">
-        <div>
-          <div class="eyebrow">Effect 4 date ranges</div>
-          <h1>Chronolizer Playground</h1>
-          <p>Turn a natural-language date range into a compact date filter.</p>
-        </div>
-        <a class="button button-outline" href="https://github.com/tobimori/chronolizer">
-          View source
-        </a>
+      <header class="intro">
+        <p class="comment">// playground</p>
+        <h1>Parse a date range.</h1>
+        <p>Enter one complete expression. The filter updates as you type.</p>
       </header>
 
-      <section class="card" aria-labelledby="input-title">
-        <div class="card-header">
-          <h2 id="input-title">Try an expression</h2>
-          <p>Results update as you type a complete date-range expression.</p>
+      <section class="workbench" aria-labelledby="input-title">
+        <div class="section-bar">
+          <h2 id="input-title">Input</h2>
+          <span>automatic</span>
         </div>
 
-        <div class="card-content">
-          <div class="field">
-            <label for="expression">Date range</label>
-            <div class="combobox">
-              <input
-                id="expression"
-                name="expression"
-                type="text"
-                value="year to date"
-                placeholder="year to date"
-                autocomplete="off"
-                spellcheck="false"
-                aria-autocomplete="list"
-                aria-controls="suggestions"
-                aria-expanded="false"
-              />
-              <ul id="suggestions" class="suggestions" role="listbox" hidden></ul>
-            </div>
+        <div class="input-area">
+          <label class="sr-only" for="expression">Date range</label>
+          <div class="combobox">
+            <span class="prompt" aria-hidden="true">&gt;</span>
+            <input
+              id="expression"
+              name="expression"
+              type="text"
+              value="year to date"
+              placeholder="year to date"
+              autocomplete="off"
+              spellcheck="false"
+              aria-autocomplete="list"
+              aria-controls="suggestions"
+              aria-expanded="false"
+            />
+            <ul id="suggestions" class="suggestions" role="listbox" hidden></ul>
           </div>
 
-          <div class="options">
-            <div class="field">
-              <label for="locale">Language</label>
+          <div class="controls">
+            <label class="select-field" for="locale">
+              <span>Language</span>
               <select id="locale" name="locale">
                 <option value="en">English</option>
                 <option value="de">German</option>
@@ -61,63 +68,71 @@
                 <option value="cs">Czech</option>
                 <option value="pl">Polish</option>
               </select>
-            </div>
+            </label>
 
-            <label class="check-field">
-              <input id="tolerant" type="checkbox" />
+            <label class="switch-field">
               <span>
                 <strong>Allow typos</strong>
-                <small>Use conservative correction.</small>
+                <small>Conservative correction</small>
               </span>
+              <input id="tolerant" type="checkbox" role="switch" />
             </label>
 
-            <label class="check-field">
-              <input id="future" type="checkbox" checked />
+            <label class="switch-field">
               <span>
                 <strong>Allow future ranges</strong>
-                <small>Accept positive relative shifts.</small>
+                <small>Positive relative shifts</small>
               </span>
+              <input id="future" type="checkbox" role="switch" checked />
             </label>
           </div>
         </div>
-      </section>
 
-      <section id="result" class="card result" aria-live="polite" hidden>
-        <div class="card-header result-header">
+        <section id="error" class="error" role="alert" hidden>
+          <span class="error-mark">×</span>
           <div>
-            <h2>Result</h2>
-            <p id="canonical"></p>
+            <strong>Parse failed</strong>
+            <p id="error-message"></p>
           </div>
-          <span id="quality" class="badge"></span>
-        </div>
-        <div class="card-content result-grid">
-          <div>
-            <h3>Date filter</h3>
-            <pre><code id="filter-output"></code></pre>
-          </div>
-          <div>
-            <h3>Parse details</h3>
-            <dl>
-              <div>
-                <dt>Corrections</dt>
-                <dd id="corrections">None</dd>
-              </div>
-              <div>
-                <dt>Alternatives</dt>
-                <dd id="alternatives">None</dd>
-              </div>
-            </dl>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      <section id="error" class="alert" role="alert" hidden>
-        <strong>Could not parse this expression.</strong>
-        <span id="error-message"></span>
-      </section>
+        <section id="result" class="result" aria-live="polite" hidden>
+          <div class="section-bar result-bar">
+            <div>
+              <h2>Output</h2>
+              <p id="canonical"></p>
+            </div>
+            <span id="quality" class="status"></span>
+          </div>
 
-      <footer>Runs entirely in your browser. No date-range input leaves this page.</footer>
+          <div class="result-grid">
+            <section class="filter-panel" aria-labelledby="filter-title">
+              <h3 id="filter-title">Date filter</h3>
+              <pre><code id="filter-output"></code></pre>
+            </section>
+
+            <section class="details" aria-labelledby="details-title">
+              <h3 id="details-title">Parse details</h3>
+              <dl>
+                <div>
+                  <dt>Corrections</dt>
+                  <dd id="corrections">None</dd>
+                </div>
+                <div>
+                  <dt>Alternatives</dt>
+                  <dd id="alternatives">None</dd>
+                </div>
+              </dl>
+            </section>
+          </div>
+        </section>
+      </section>
     </main>
+
+    <footer class="footer">
+      <span>Runs locally in your browser.</span>
+      <span>No input is sent to a server.</span>
+    </footer>
 
     <script type="module" src="/src/main.js"></script>
   </body>
