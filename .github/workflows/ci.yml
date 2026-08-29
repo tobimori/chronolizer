@@ -39,6 +39,9 @@ jobs:
       - name: Build package
         run: pnpm build
 
+      - name: Build playground
+        run: pnpm --dir playground build
+
   bundle-size:
     name: Check package entry sizes
     runs-on: ubuntu-latest

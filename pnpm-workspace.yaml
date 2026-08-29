@@ -1,5 +1,10 @@
+packages:
+  - playground
+
 allowBuilds:
+  esbuild: true
   msgpackr-extract: false
+  workerd: true
 catalog:
   vite: npm:@voidzero-dev/vite-plus-core@0.3.0
   vite-plus: 0.3.0

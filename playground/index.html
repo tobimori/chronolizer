@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Try Chronolizer natural-language date ranges in your browser."
+    />
+    <title>Chronolizer Playground</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="page-header">
+        <div>
+          <div class="eyebrow">Effect 4 date ranges</div>
+          <h1>Chronolizer Playground</h1>
+          <p>Turn a natural-language date range into a compact date filter.</p>
+        </div>
+        <a class="button button-outline" href="https://github.com/tobimori/chronolizer">
+          View source
+        </a>
+      </header>
+
+      <section class="card" aria-labelledby="input-title">
+        <div class="card-header">
+          <h2 id="input-title">Try an expression</h2>
+          <p>Results update as you type a complete date-range expression.</p>
+        </div>
+
+        <div class="card-content">
+          <div class="field">
+            <label for="expression">Date range</label>
+            <div class="combobox">
+              <input
+                id="expression"
+                name="expression"
+                type="text"
+                value="year to date"
+                placeholder="year to date"
+                autocomplete="off"
+                spellcheck="false"
+                aria-autocomplete="list"
+                aria-controls="suggestions"
+                aria-expanded="false"
+              />
+              <ul id="suggestions" class="suggestions" role="listbox" hidden></ul>
+            </div>
+          </div>
+
+          <div class="options">
+            <div class="field">
+              <label for="locale">Language</label>
+              <select id="locale" name="locale">
+                <option value="en">English</option>
+                <option value="de">German</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+                <option value="nl">Dutch</option>
+                <option value="tr">Turkish</option>
+                <option value="cs">Czech</option>
+                <option value="pl">Polish</option>
+              </select>
+            </div>
+
+            <label class="check-field">
+              <input id="tolerant" type="checkbox" />
+              <span>
+                <strong>Allow typos</strong>
+                <small>Use conservative correction.</small>
+              </span>
+            </label>
+
+            <label class="check-field">
+              <input id="future" type="checkbox" checked />
+              <span>
+                <strong>Allow future ranges</strong>
+                <small>Accept positive relative shifts.</small>
+              </span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section id="result" class="card result" aria-live="polite" hidden>
+        <div class="card-header result-header">
+          <div>
+            <h2>Result</h2>
+            <p id="canonical"></p>
+          </div>
+          <span id="quality" class="badge"></span>
+        </div>
+        <div class="card-content result-grid">
+          <div>
+            <h3>Date filter</h3>
+            <pre><code id="filter-output"></code></pre>
+          </div>
+          <div>
+            <h3>Parse details</h3>
+            <dl>
+              <div>
+                <dt>Corrections</dt>
+                <dd id="corrections">None</dd>
+              </div>
+              <div>
+                <dt>Alternatives</dt>
+                <dd id="alternatives">None</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <section id="error" class="alert" role="alert" hidden>
+        <strong>Could not parse this expression.</strong>
+        <span id="error-message"></span>
+      </section>
+
+      <footer>Runs entirely in your browser. No date-range input leaves this page.</footer>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
