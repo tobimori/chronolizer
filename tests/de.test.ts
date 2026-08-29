@@ -600,7 +600,7 @@ describe("German date ranges", () => {
       );
       expect(error).toBeInstanceOf(NaturalLanguageParseError);
       expect(error.message).toBe(
-        "The expression contains a positive relative shift, but future ranges are disabled",
+        "This date range is in the future, but future ranges are disabled",
       );
     }),
   );

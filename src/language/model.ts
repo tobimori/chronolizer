@@ -74,7 +74,7 @@ export const canonicalBaseLocale = (input: string) =>
 
 export const Locale = Schema.String.check(
   Schema.makeFilter((value) => Option.contains(canonicalBaseLocale(value), value), {
-    expected: "a canonical BCP 47 base locale identifier",
+    expected: "a standard BCP 47 language code",
   }),
 ).annotate({ identifier: "Locale" });
 

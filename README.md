@@ -1,6 +1,6 @@
 # Chronolizer
 
-Chronolizer is an Effect 4 library that converts natural-language date ranges to compact date-math filters and back. It supports open ranges, autocomplete, typo correction, and eight languages.
+Chronolizer is an Effect 4 library that converts natural-language date ranges to compact date filters and back. It supports ranges without a start or end, autocomplete, spelling correction, and eight languages.
 
 ```text
 year to date          → { gte: "now/y", lte: "now" }
@@ -9,11 +9,11 @@ since January 2025    → { gte: "2025-01-01" }
 ```
 
 > [!NOTE]
-> Chronolizer currently uses `effect@4.0.0-rc.112`. The API can change while Effect v4 has release-candidate status.
+> Chronolizer currently uses `effect@4.0.0-rc.112`. Effect 4 is not stable yet, so its API can change.
 
 ## Install Chronolizer
 
-Chronolizer requires Effect 4 and ESM. Install both packages as direct dependencies.
+Chronolizer requires Effect 4 and uses ES modules. Install both packages:
 
 ```sh
 pnpm add chronolizer effect@4.0.0-rc.112
@@ -21,7 +21,7 @@ pnpm add chronolizer effect@4.0.0-rc.112
 
 ## Parse your first date range
 
-English is available from the main package entry.
+English is available from the main package.
 
 ```ts
 import { EnglishLanguageLayer, formatFilter, parseNatural } from "chronolizer";
@@ -43,7 +43,7 @@ Effect.runPromise(program);
 
 ### Parse other languages
 
-Import each non-English language from its own package entry. This keeps unused languages out of your bundle.
+Import each non-English language separately. This keeps unused language code out of your build.
 
 ```ts
 import { formatFilter, parseNatural } from "chronolizer";
@@ -60,7 +60,7 @@ Effect.runPromise(program);
 // { gte: "now/y", lte: "now" }
 ```
 
-Use `languagePluginsLayer` when one application needs more than one language:
+Use `languagePluginsLayer` to combine languages:
 
 ```ts
 import { EnglishLanguage, languagePluginsLayer, parseNatural } from "chronolizer";
@@ -77,7 +77,7 @@ Effect.runPromise(program);
 
 ### Format a range as natural language
 
-`formatNatural` returns the canonical phrase for a range. It preserves the meaning, but it does not reproduce the original wording. Absolute days use the locale's numeric `Intl.DateTimeFormat` form.
+`formatNatural` returns one standard phrase for a range. It preserves the meaning, but it does not reproduce the original wording. Absolute days use the language's numeric `Intl.DateTimeFormat` form.
 
 ```ts
 import { formatNatural, parseFilter } from "chronolizer";
@@ -96,7 +96,7 @@ Effect.runPromise(program);
 
 ### Add autocomplete
 
-`suggestNatural` returns valid canonical phrases and their semantic ranges.
+`suggestNatural` returns valid standard phrases and their date ranges.
 
 ```ts
 import { EnglishLanguageLayer, suggestNatural } from "chronolizer";
@@ -115,7 +115,7 @@ The default limit is 10. The maximum limit is 100. A nonpositive or invalid limi
 
 ### Accept spelling errors
 
-Set `typoMode` to `"tolerant"` for conservative correction:
+Set `typoMode` to `"tolerant"` to correct close spelling errors:
 
 ```ts
 const program = parseNatural("januray of last yaer", {
@@ -124,11 +124,11 @@ const program = parseNatural("januray of last yaer", {
 });
 ```
 
-The successful value contains its `quality`, applied `corrections`, and any semantic `alternatives`. Strict mode is the default and does not correct the input.
+The result contains its `quality`, applied `corrections`, and any `alternatives` with a different meaning. Strict mode is the default and does not correct the input.
 
-### Exclude future relative ranges
+### Exclude future ranges
 
-Set `allowFuture` to `false` to reject explicit relative future ranges:
+Set `allowFuture` to `false` to reject periods after the current period:
 
 ```ts
 const program = parseNatural("next 3 months", {
@@ -137,7 +137,7 @@ const program = parseNatural("next 3 months", {
 });
 ```
 
-This option rejects forms such as `next month`, `next 3 weeks`, and `in 3 years`. It keeps complete current calendar periods such as `today`, `this week`, and `this month`. It does not change them to period-to-date ranges.
+This option rejects forms such as `next month`, `next 3 weeks`, and `in 3 years`. It keeps complete current calendar periods such as `today`, `this week`, and `this month`. It does not change them to ranges that end at the current time.
 
 The option does not compare fixed dates, such as `January 2099`, with the current date. Parsing does not read the clock.
 
@@ -145,7 +145,7 @@ The same option is available in `suggestNatural`.
 
 ### Resolve a range to dates
 
-Provide an Effect time zone when you resolve relative expressions:
+Provide an Effect time zone when you calculate ranges based on the current date:
 
 ```ts
 import { parseFilter, resolve } from "chronolizer";
@@ -159,7 +159,7 @@ const program = parseFilter({ gte: "now/y", lte: "now" }).pipe(
 Effect.runPromise(program);
 ```
 
-`resolve` uses the Effect clock and `DateTime.CurrentTimeZone`. It does not use the host time zone without your decision.
+`resolve` uses the Effect clock and `DateTime.CurrentTimeZone`. It uses only the time zone that you provide.
 
 ### Validate an external filter
 
@@ -176,18 +176,18 @@ const program = Schema.decodeUnknownEffect(DateFilter)(externalInput).pipe(
 Effect.runPromise(program);
 ```
 
-## Supported expressions
+## Supported input
 
-Supported input families include:
+You can parse:
 
-- calendar days, weeks, months, quarters, and years;
-- rolling ranges, such as `last 3 months`;
-- calendar offsets, such as `30 months ago`;
-- period-to-date ranges, such as `year to date`;
-- fixed months, quarters, years, and explicit date intervals;
+- days, weeks, months, quarters, and years;
+- ranges with a length, such as `last 3 months`;
+- single periods in the past or future, such as `30 months ago`;
+- ranges from a period start to now, such as `year to date`;
+- fixed months, quarters, years, and date ranges;
 - named days with or without a year, such as `January 12` and `12th of January`;
-- open ranges, such as `since January 2025` and `from January 12`;
-- compositional boundaries, such as `the day before January 12`;
+- ranges without one end, such as `since January 2025` and `from January 12`;
+- combined phrases, such as `the day before January 12`;
 - period starts, period ends, and weekends;
 - abbreviated month names and common equivalent phrases.
 
@@ -206,16 +206,16 @@ Examples:
 
 ## Supported languages
 
-| Language | Locale | Import                                    |
-| -------- | ------ | ----------------------------------------- |
-| English  | `en`   | `chronolizer` or `chronolizer/locales/en` |
-| German   | `de`   | `chronolizer/locales/de`                  |
-| Spanish  | `es`   | `chronolizer/locales/es`                  |
-| French   | `fr`   | `chronolizer/locales/fr`                  |
-| Dutch    | `nl`   | `chronolizer/locales/nl`                  |
-| Turkish  | `tr`   | `chronolizer/locales/tr`                  |
-| Czech    | `cs`   | `chronolizer/locales/cs`                  |
-| Polish   | `pl`   | `chronolizer/locales/pl`                  |
+| Language | Code | Import                                    |
+| -------- | ---- | ----------------------------------------- |
+| English  | `en` | `chronolizer` or `chronolizer/locales/en` |
+| German   | `de` | `chronolizer/locales/de`                  |
+| Spanish  | `es` | `chronolizer/locales/es`                  |
+| French   | `fr` | `chronolizer/locales/fr`                  |
+| Dutch    | `nl` | `chronolizer/locales/nl`                  |
+| Turkish  | `tr` | `chronolizer/locales/tr`                  |
+| Czech    | `cs` | `chronolizer/locales/cs`                  |
+| Polish   | `pl` | `chronolizer/locales/pl`                  |
 
 ## Date filter reference
 
@@ -239,22 +239,22 @@ unit       := "d" | "w" | "M" | "q" | "y"
 
 `/unit` moves a value to the start of its calendar unit. Add `||` before operations on a fixed date, for example `2025-01-01||+1M`.
 
-Complete calendar periods use a half-open interval: the lower bound is inclusive and the next period start is exclusive. Weeks start on Monday.
+A complete calendar period includes its start but excludes the start of the next period. Weeks start on Monday.
 
 A named day without a year uses the current calendar year. Write the year for February 29 because parsing does not read the clock.
 
 ## Main API
 
-| Export                | Purpose                                                             |
-| --------------------- | ------------------------------------------------------------------- |
-| `parseNatural`        | Parse complete natural-language input to a semantic range           |
-| `formatNatural`       | Render a supported range as a canonical phrase                      |
-| `suggestNatural`      | Return autocomplete suggestions and semantic ranges                 |
-| `parseFilter`         | Parse a date filter to a semantic range                             |
-| `formatFilter`        | Format a semantic range as a date filter                            |
-| `resolve`             | Resolve a semantic range with an Effect clock and time zone         |
-| `DateFilter`          | Validate external date-filter data with Effect Schema               |
-| `DateRangeFromFilter` | Decode and encode a filter through one Effect Schema transformation |
+| Export                | Purpose                                                    |
+| --------------------- | ---------------------------------------------------------- |
+| `parseNatural`        | Parse complete natural-language input to a date range      |
+| `formatNatural`       | Write a supported range as one standard phrase             |
+| `suggestNatural`      | Return autocomplete suggestions and date ranges            |
+| `parseFilter`         | Parse a date filter to a date range                        |
+| `formatFilter`        | Format a date range as a date filter                       |
+| `resolve`             | Calculate dates with an Effect clock and time zone         |
+| `DateFilter`          | Validate external date-filter data with Effect Schema      |
+| `DateRangeFromFilter` | Convert a filter in both directions with one Effect Schema |
 
 ## License
 

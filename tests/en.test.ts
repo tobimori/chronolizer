@@ -707,7 +707,7 @@ describe("English date ranges", () => {
       const error = yield* Effect.flip(parseEnglishWithoutFuture(input));
       expect(error).toBeInstanceOf(NaturalLanguageParseError);
       expect(error.message).toBe(
-        "The expression contains a positive relative shift, but future ranges are disabled",
+        "This date range is in the future, but future ranges are disabled",
       );
     }),
   );
@@ -745,7 +745,7 @@ describe("English date ranges", () => {
       expect(error).toBeInstanceOf(NaturalLanguageRenderError);
       expect(error).toMatchObject({
         locale: "en",
-        message: "The range has no canonical natural-language form in this locale",
+        message: "The range has no standard natural-language form for this language",
       });
     }),
   );

@@ -18,6 +18,6 @@ export const formatNatural = Effect.fn("chronolizer.formatNatural")(function* (
   if (Option.isSome(rendered)) return rendered.value;
   return yield* new NaturalLanguageRenderError({
     locale: options.locale,
-    message: "The range has no canonical natural-language form in this locale",
+    message: "The range has no standard natural-language form for this language",
   });
 });

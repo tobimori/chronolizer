@@ -56,7 +56,7 @@ export const parseNatural = Effect.fn("chronolizer.parseNatural")(function* (
     return yield* new NaturalLanguageParseError({
       input,
       locale: options.locale,
-      message: "The complete input must contain a date-range expression",
+      message: "The complete input must contain a date range",
     });
   }
 
@@ -68,8 +68,8 @@ export const parseNatural = Effect.fn("chronolizer.parseNatural")(function* (
   if (options.typoMode !== "tolerant") {
     const message =
       exact.length > 0 && options.allowFuture === false
-        ? "The expression contains a positive relative shift, but future ranges are disabled"
-        : "The complete input is not a supported date-range expression";
+        ? "This date range is in the future, but future ranges are disabled"
+        : "The complete input is not a supported date range";
     return yield* new NaturalLanguageParseError({ input, locale: options.locale, message });
   }
 
@@ -89,7 +89,7 @@ export const parseNatural = Effect.fn("chronolizer.parseNatural")(function* (
     return yield* new NaturalLanguageParseError({
       input,
       locale: options.locale,
-      message: "No conservative typo correction produced a complete expression",
+      message: "No supported date range was found after spelling correction",
     });
   }
   const first = EffectArray.headNonEmpty(successful);

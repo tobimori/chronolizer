@@ -149,7 +149,7 @@ const createRegistry = Effect.fn(function* () {
       return yield* new LanguageRegistrationError({
         pluginId,
         locale: contribution.locale,
-        message: "Invalid plugin identifier or contribution metadata",
+        message: "The plugin name or language settings are invalid",
       });
     }
 
@@ -225,7 +225,7 @@ const createPluginRegistry = Effect.fn(function* (plugins: ReadonlyArray<Languag
     return yield* new LanguageRegistrationError({
       pluginId: duplicate,
       locale: "*",
-      message: "Plugin identifiers must be unique",
+      message: "Plugin names must be unique",
     });
   }
   const registry = yield* createRegistry();

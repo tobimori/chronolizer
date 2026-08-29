@@ -96,7 +96,7 @@ export const resolve = Effect.fn("chronolizer.resolve")(function* (range: DateRa
     const upper = yield* resolveUpper(range.upper, reference, zone);
     if (DateTime.toEpochMillis(lower.value) >= DateTime.toEpochMillis(upper.value)) {
       return yield* new ResolutionError({
-        message: "The lower range endpoint must be before the upper endpoint",
+        message: "The range start must be before the range end",
       });
     }
     return ResolvedDateRange.make({ lower, upper });

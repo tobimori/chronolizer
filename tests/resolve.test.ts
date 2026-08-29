@@ -158,7 +158,7 @@ describe("date-range resolution", () => {
         resolveFilter({ gte: "2025-02-01", lt: "2025-01-01" }, "UTC"),
       );
       expect(error).toBeInstanceOf(ResolutionError);
-      expect(error.message).toBe("The lower range endpoint must be before the upper endpoint");
+      expect(error.message).toBe("The range start must be before the range end");
     }),
   );
 });
