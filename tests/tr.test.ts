@@ -316,6 +316,17 @@ describe("Turkish date ranges", () => {
     }),
   );
 
+  it.effect(
+    "uses a Turkish calendar offset as a range endpoint",
+    Effect.fn(function* () {
+      const result = yield* parseTurkish("geçen hafta - 2 hafta sonra");
+      expect(formatFilter(result.range)).toEqual({
+        gte: "now-1w/w",
+        lt: "now+2w/w+1w",
+      });
+    }),
+  );
+
   it.effect.each([
     ["ayın geri kalanı", "now/M+1M"],
     ["haftanın geri kalanı", "now/w+1w"],

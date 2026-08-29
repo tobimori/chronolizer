@@ -328,6 +328,17 @@ describe("Dutch date ranges", () => {
     }),
   );
 
+  it.effect(
+    "uses a Dutch calendar offset as a range endpoint",
+    Effect.fn(function* () {
+      const result = yield* parseDutch("vorige week - over 2 weken");
+      expect(formatFilter(result.range)).toEqual({
+        gte: "now-1w/w",
+        lt: "now+2w/w+1w",
+      });
+    }),
+  );
+
   it.effect.each([
     ["rest van de maand", "now/M+1M"],
     ["rest van de week", "now/w+1w"],

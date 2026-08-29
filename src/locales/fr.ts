@@ -606,7 +606,8 @@ const parsePeriod = (input: string): Option.Option<Period> => {
   const wrapper = ["pendant ", "en ", "tout ", "tout le ", "toute la "].find((prefix) =>
     input.startsWith(prefix),
   );
-  return parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
+  const base = parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
+  return Option.isSome(base) ? base : parseCalendarOffset(input);
 };
 
 const countedUnit = (value: string, amount: number) => {
@@ -711,28 +712,21 @@ const singularCalendarOffsets = units.flatMap((entry) => {
 const parseCalendarOffset = (input: string) => {
   const singular = singularCalendarOffsets.find((entry) => entry.phrase === input);
   if (singular !== undefined) {
-    return Option.some(
-      candidate(
-        periodRange(relativePeriod(singular.entry.unit, singular.direction, singular.phrase)),
-        singular.phrase,
-      ),
-    );
+    return Option.some(relativePeriod(singular.entry.unit, singular.direction, singular.phrase));
   }
   const past = EffectString.match(calendarPastPattern)(input);
   const future = EffectString.match(calendarFuturePattern)(input);
   const match = Option.firstSomeOf([past, future]);
-  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  if (Option.isNone(match)) return Option.none<Period>();
   const amount = parseTrailingCount(textAt(match.value, 1));
-  if (Option.isNone(amount)) return Option.none<ReturnType<typeof candidate>>();
+  if (Option.isNone(amount)) return Option.none<Period>();
   const entry = countedUnit(textAt(match.value, 2), amount.value);
-  if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
+  if (entry === undefined) return Option.none<Period>();
   const direction = Option.isSome(past) ? -amount.value : amount.value;
   const noun = amount.value === 1 ? entry.singular : entry.plural;
   const canonical =
     direction < 0 ? `il y a ${amount.value} ${noun}` : `dans ${amount.value} ${noun}`;
-  return Option.some(
-    candidate(periodRange(relativePeriod(entry.unit, direction, canonical)), canonical),
-  );
+  return Option.some(relativePeriod(entry.unit, direction, canonical));
 };
 
 const parseRollingPeriod = (input: string) => {
@@ -828,8 +822,6 @@ const parseFrench = (input: string) => {
   if (["depuis maintenant", "à partir de maintenant", "désormais"].includes(input)) {
     return Option.some(candidate(fromNowRange(), "depuis maintenant"));
   }
-  const offset = parseCalendarOffset(input);
-  if (Option.isSome(offset)) return offset;
   const rolling = parseRollingPeriod(input);
   if (Option.isSome(rolling)) return rolling;
   const toDate = toDatePhrases.find((entry) => entry.phrase === input);

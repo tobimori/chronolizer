@@ -532,6 +532,17 @@ describe("English date ranges", () => {
     }, Effect.provide(EnglishLanguageLayer)),
   );
 
+  it.effect(
+    "uses a calendar offset as a range endpoint",
+    Effect.fn(function* () {
+      const result = yield* parseEnglish("last week to in two weeks");
+      expect(formatFilter(result.range)).toEqual({
+        gte: "now-1w/w",
+        lt: "now+2w/w+1w",
+      });
+    }),
+  );
+
   it.effect.each([
     ["January 1–15, 2025", "2025-01-01", "2025-01-16"],
     ["1st through 15th January 2025", "2025-01-01", "2025-01-16"],

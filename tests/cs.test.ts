@@ -300,6 +300,17 @@ describe("Czech date ranges", () => {
     }),
   );
 
+  it.effect(
+    "uses a Czech calendar offset as a range endpoint",
+    Effect.fn(function* () {
+      const result = yield* parseCzech("minulý týden - za 2 týdny");
+      expect(formatFilter(result.range)).toEqual({
+        gte: "now-1w/w",
+        lt: "now+2w/w+1w",
+      });
+    }),
+  );
+
   it.effect.each([
     ["zbytek měsíce", "now/M+1M"],
     ["zbytek týdne", "now/w+1w"],

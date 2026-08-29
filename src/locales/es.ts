@@ -557,7 +557,8 @@ const parsePeriod = (input: string): Option.Option<Period> => {
   const wrapper = ["durante ", "en ", "todo ", "todo el ", "toda la "].find((prefix) =>
     input.startsWith(prefix),
   );
-  return parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
+  const base = parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
+  return Option.isSome(base) ? base : parseCalendarOffset(input);
 };
 
 const countedUnit = (value: string, amount: number) => {
@@ -598,9 +599,9 @@ const parseCalendarOffset = (input: string) => {
   const match = EffectString.match(
     /^(hace|dentro de|en) ([1-9]\d*|un|una) (día|dia|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
   )(input);
-  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  if (Option.isNone(match)) return Option.none<Period>();
   const amount = writtenAmount(textAt(match.value, 2));
-  if (Option.isNone(amount)) return Option.none<ReturnType<typeof candidate>>();
+  if (Option.isNone(amount)) return Option.none<Period>();
   const entry = countedUnit(textAt(match.value, 3), amount.value);
   const amountText = textAt(match.value, 2);
   if (
@@ -608,16 +609,14 @@ const parseCalendarOffset = (input: string) => {
     ((amountText === "un" || amountText === "una") &&
       !agreesWithIndefiniteArticle(entry, amountText))
   ) {
-    return Option.none<ReturnType<typeof candidate>>();
+    return Option.none<Period>();
   }
   const isPast = textAt(match.value, 1) === "hace";
   const quantity = amount.value === 1 ? indefiniteArticle(entry) : String(amount.value);
   const noun = amount.value === 1 ? entry.singular : entry.plural;
   const canonical = `${isPast ? "hace" : "dentro de"} ${quantity} ${noun}`;
   const direction = isPast ? -amount.value : amount.value;
-  return Option.some(
-    candidate(periodRange(relativePeriod(entry.unit, direction, canonical)), canonical),
-  );
+  return Option.some(relativePeriod(entry.unit, direction, canonical));
 };
 
 const rollingCanonical = (entry: UnitForms, amount: number, future: boolean) => {
@@ -791,8 +790,6 @@ const parseSpanish = (input: string) => {
   if (["desde ahora", "a partir de ahora", "de ahora en adelante"].includes(input)) {
     return Option.some(candidate(fromNowRange(), "desde ahora"));
   }
-  const offset = parseCalendarOffset(input);
-  if (Option.isSome(offset)) return offset;
   const rolling = parseRollingPeriod(input);
   if (Option.isSome(rolling)) return rolling;
   const toDate = toDatePhrases.find((entry) => entry.phrase === input);

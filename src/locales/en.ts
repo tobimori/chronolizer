@@ -469,7 +469,8 @@ const parsePeriod = (input: string): Option.Option<Period> => {
   const wrapper = ["during ", "in ", "for ", "all of ", "the whole of "].find((prefix) =>
     input.startsWith(prefix),
   );
-  return parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
+  const base = parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
+  return Option.isSome(base) ? base : parseCalendarOffset(input);
 };
 
 const boundaryCandidate = (input: string) =>
@@ -523,9 +524,7 @@ const parseCalendarOffset = (input: string) => {
       const isPast = directionText === "ago" || directionText === "prior";
       const direction = isPast ? -1 : 1;
       const canonical = isPast ? `1 ${entry[0]} ago` : `in 1 ${entry[0]}`;
-      return Option.some(
-        candidate(periodRange(relativePeriod(entry[1], direction, canonical)), canonical),
-      );
+      return Option.some(relativePeriod(entry[1], direction, canonical));
     }
   }
 
@@ -539,18 +538,16 @@ const parseCalendarOffset = (input: string) => {
     /^([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years) from now$/u,
   )(input);
   const match = Option.firstSomeOf([past, futureIn, futureFromNow]);
-  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  if (Option.isNone(match)) return Option.none<Period>();
   const amount = parseTrailingCount(textAt(match.value, 1));
-  if (Option.isNone(amount)) return Option.none<ReturnType<typeof candidate>>();
+  if (Option.isNone(amount)) return Option.none<Period>();
   const unitText = textAt(match.value, 2);
   const entry = countedUnit(unitText, amount.value);
-  if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
+  if (entry === undefined) return Option.none<Period>();
   const direction = Option.isSome(past) ? -amount.value : amount.value;
   const canonical =
     direction < 0 ? `${amount.value} ${unitText} ago` : `in ${amount.value} ${unitText}`;
-  return Option.some(
-    candidate(periodRange(relativePeriod(entry[1], direction, canonical)), canonical),
-  );
+  return Option.some(relativePeriod(entry[1], direction, canonical));
 };
 
 const parseRollingPeriod = (input: string) => {
@@ -624,9 +621,6 @@ const parseEnglish = (input: string) => {
   if (["from now", "from now on", "starting now"].includes(input)) {
     return Option.some(candidate(fromNowRange(), "from now"));
   }
-
-  const offset = parseCalendarOffset(input);
-  if (Option.isSome(offset)) return offset;
 
   const rolling = parseRollingPeriod(input);
   if (Option.isSome(rolling)) return rolling;

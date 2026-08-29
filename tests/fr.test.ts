@@ -358,6 +358,17 @@ describe("French date ranges", () => {
     }),
   );
 
+  it.effect(
+    "uses a French calendar offset as a range endpoint",
+    Effect.fn(function* () {
+      const result = yield* parseFrench("la semaine dernière - dans 2 semaines");
+      expect(formatFilter(result.range)).toEqual({
+        gte: "now-1w/w",
+        lt: "now+2w/w+1w",
+      });
+    }),
+  );
+
   it.effect.each([
     ["reste du mois", "now/M+1M"],
     ["reste de cette semaine", "now/w+1w"],

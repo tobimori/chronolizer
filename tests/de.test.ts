@@ -466,6 +466,17 @@ describe("German date ranges", () => {
     }, Effect.provide(GermanLanguageLayer)),
   );
 
+  it.effect(
+    "uses a German calendar offset as a range endpoint",
+    Effect.fn(function* () {
+      const result = yield* parseGerman("letzte Woche bis in 2 Wochen");
+      expect(formatFilter(result.range)).toEqual({
+        gte: "now-1w/w",
+        lt: "now+2w/w+1w",
+      });
+    }),
+  );
+
   it.effect.each([
     ["vom 1. bis 15. Januar 2025", "2025-01-01", "2025-01-16"],
     ["1.–15. Januar 2025", "2025-01-01", "2025-01-16"],

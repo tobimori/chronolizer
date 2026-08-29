@@ -358,6 +358,17 @@ describe("Spanish date ranges", () => {
     }),
   );
 
+  it.effect(
+    "uses a Spanish calendar offset as a range endpoint",
+    Effect.fn(function* () {
+      const result = yield* parseSpanish("la semana pasada - dentro de 2 semanas");
+      expect(formatFilter(result.range)).toEqual({
+        gte: "now-1w/w",
+        lt: "now+2w/w+1w",
+      });
+    }),
+  );
+
   it.effect.each([
     ["resto del mes", "now/M+1M"],
     ["lo que queda del año", "now/y+1y"],

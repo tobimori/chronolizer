@@ -591,7 +591,8 @@ const parsePeriod = (input: string): Option.Option<Period> => {
   const wrapper = ["w ", "we ", "przez ", "cały ", "całe "].find((prefix) =>
     input.startsWith(prefix),
   );
-  return parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
+  const base = parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
+  return Option.isSome(base) ? base : parseCalendarOffset(input);
 };
 
 const countedUnit = (value: string) => unitAliases.find((entry) => entry[0] === value)?.[1];
@@ -626,22 +627,20 @@ const parseCalendarOffset = (input: string) => {
   const past = EffectString.match(calendarPastPattern)(input);
   const future = EffectString.match(calendarFuturePattern)(input);
   const match = Option.firstSomeOf([past, future]);
-  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  if (Option.isNone(match)) return Option.none<Period>();
   const amountText = textAt(match.value, 1);
   const unitText = textAt(match.value, 2);
   const amount = parseTrailingCount(amountText || "1");
   const unit = countedUnit(unitText);
-  if (Option.isNone(amount) || unit === undefined) {
-    return Option.none<ReturnType<typeof candidate>>();
-  }
+  if (Option.isNone(amount) || unit === undefined) return Option.none<Period>();
   const entry = units.find((item) => item.unit === unit);
   if (entry === undefined || (amountText.length === 0 && unitText !== entry.singular)) {
-    return Option.none<ReturnType<typeof candidate>>();
+    return Option.none<Period>();
   }
   const direction = Option.isSome(past) ? -amount.value : amount.value;
   const noun = countNoun(amount.value, entry);
   const canonical = direction < 0 ? `${amount.value} ${noun} temu` : `za ${amount.value} ${noun}`;
-  return Option.some(candidate(periodRange(relativePeriod(unit, direction, canonical)), canonical));
+  return Option.some(relativePeriod(unit, direction, canonical));
 };
 
 const rollingModifier = (amount: number, future: boolean) => {
@@ -723,8 +722,6 @@ const parsePolish = (input: string) => {
   if (["od teraz", "od dziś"].includes(input)) {
     return Option.some(candidate(fromNowRange(), "od teraz"));
   }
-  const offset = parseCalendarOffset(input);
-  if (Option.isSome(offset)) return offset;
   const rolling = parseRollingPeriod(input);
   if (Option.isSome(rolling)) return rolling;
   const toDate = toDatePhrases.find((entry) => entry.phrase === input);

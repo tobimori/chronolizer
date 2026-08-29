@@ -348,6 +348,17 @@ describe("Polish date ranges", () => {
     }),
   );
 
+  it.effect(
+    "uses a Polish calendar offset as a range endpoint",
+    Effect.fn(function* () {
+      const result = yield* parsePolish("poprzedni tydzień - za 2 tygodnie");
+      expect(formatFilter(result.range)).toEqual({
+        gte: "now-1w/w",
+        lt: "now+2w/w+1w",
+      });
+    }),
+  );
+
   it.effect.each([
     ["do końca tego miesiąca", "now/M+1M", "do końca tego miesiąca"],
     ["do końca miesiąca", "now/M+1M", "do końca tego miesiąca"],
