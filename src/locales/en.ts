@@ -15,6 +15,7 @@ import { normalizeNaturalText } from "../natural/text.ts";
 import {
   calendarPeriodOffset,
   candidate,
+  currentYearDatePeriods,
   datedPeriods,
   datedQuarterPeriods,
   fixedDatePeriod,
@@ -27,10 +28,12 @@ import {
   joinedNowCandidate,
   joinedPeriodCandidate,
   monthOfRelativeYear,
+  namedCurrentYearDatePeriod,
   namedDatePeriod,
   openBoundaryCandidate,
   parseTrailingCount,
   periodEndDay,
+  periodPreviousDay,
   periodRange,
   periodsFromPhrases,
   periodStartDay,
@@ -192,6 +195,9 @@ const parseQuarter = (input: string) => {
     : Option.some(quarterOfRelativeYear(quarter, 0, `Q${quarter}`));
 };
 
+const currentDateLabel = (day: number, month: number) =>
+  `${day} ${title(textAt(months, month - 1))}`;
+
 const parseNamedDate = (input: string) => {
   const dayFirst = EffectString.match(/^([0-3]?\d)(?:st|nd|rd|th)? ([a-z]+\.?) (\d{4})$/u)(input);
   if (Option.isSome(dayFirst)) {
@@ -215,7 +221,26 @@ const parseNamedDate = (input: string) => {
       (day, month, year) => `${day} ${title(textAt(months, month - 1))} ${year}`,
     );
   }
-  return Option.none<Period>();
+
+  const currentDayFirst = EffectString.match(/^([0-3]?\d)(?:st|nd|rd|th)?(?: of)? ([a-z]+\.?)$/u)(
+    input,
+  );
+  const currentMonthFirst = EffectString.match(/^([a-z]+\.?) ([0-3]?\d)(?:st|nd|rd|th)?$/u)(input);
+  const current = Option.firstSomeOf([currentDayFirst, currentMonthFirst]);
+  if (Option.isNone(current)) return Option.none<Period>();
+  return Option.isSome(currentDayFirst)
+    ? namedCurrentYearDatePeriod(
+        textAt(current.value, 2),
+        textAt(current.value, 1),
+        monthNumber,
+        currentDateLabel,
+      )
+    : namedCurrentYearDatePeriod(
+        textAt(current.value, 1),
+        textAt(current.value, 2),
+        monthNumber,
+        currentDateLabel,
+      );
 };
 
 const parseBasePeriod = (input: string) => {
@@ -328,6 +353,16 @@ const parseBasePeriod = (input: string) => {
 };
 
 const parsePeriod = (input: string) => {
+  const previousDay = EffectString.match(/^(?:the )?day before (.+)$/u)(input);
+  if (Option.isSome(previousDay)) {
+    const period = parseBasePeriod(textAt(previousDay.value, 1));
+    if (Option.isSome(period)) {
+      return Option.some(
+        periodPreviousDay(period.value, `the day before ${period.value.canonical}`),
+      );
+    }
+  }
+
   const edge = EffectString.match(/^(?:the )?(start|beginning|end) of (.+)$/u)(input);
   if (Option.isSome(edge)) {
     const period = parseBasePeriod(textAt(edge.value, 2));
@@ -533,6 +568,7 @@ const parseEnglish = (input: string) => {
 const staticPeriodPhrases = [
   "today",
   "yesterday",
+  "the day before yesterday",
   "tomorrow",
   "this weekend",
   "last weekend",
@@ -636,6 +672,7 @@ const renderEnglish = (range: DateRangeExpr) => {
 
   const periods = [
     ...staticPeriods,
+    ...currentYearDatePeriods(range, currentDateLabel),
     ...periodsFromPhrases(
       [...datedPeriods(range, months), ...datedQuarterPeriods(range)],
       parsePeriod,

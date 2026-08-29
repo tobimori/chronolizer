@@ -172,6 +172,15 @@ describe("Czech date ranges", () => {
     }),
   );
 
+  it.effect.each(["12. ledna", "12 ledna"])(
+    "maps current-year Czech date %j",
+    Effect.fn(function* (input) {
+      const result = yield* parseCzech(input);
+      expect(formatFilter(result.range)).toEqual({ gte: "now/y+11d", lt: "now/y+12d" });
+      expect(yield* formatNatural(result.range, { locale: "cs" })).toBe("12. ledna");
+    }, Effect.provide(CzechLanguageLayer)),
+  );
+
   it.effect.each([
     ["předevčírem", "now-2d/d", "now-2d/d+1d"],
     ["pozítří", "now+2d/d", "now+2d/d+1d"],

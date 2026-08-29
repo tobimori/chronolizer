@@ -302,6 +302,49 @@ describe("English date ranges", () => {
     }),
   );
 
+  it.effect.each(["January 12", "12 January", "12th January", "12th of January"])(
+    "maps current-year English date %j",
+    Effect.fn(function* (input) {
+      const result = yield* parseEnglish(input);
+      expect(formatFilter(result.range)).toEqual({ gte: "now/y+11d", lt: "now/y+12d" });
+      expect(yield* formatNatural(result.range, { locale: "en" })).toBe("12 January");
+    }, Effect.provide(EnglishLanguageLayer)),
+  );
+
+  it.effect.each([
+    ["February 28", "now/y+1M+27d", "now/y+1M+28d"],
+    ["April 30", "now/y+3M+29d", "now/y+3M+30d"],
+    ["December 31", "now/y+11M+30d", "now/y+11M+31d"],
+  ] as const)(
+    "keeps current-year English day inside %s",
+    Effect.fn(function* (testCase) {
+      const [input, gte, lt] = testCase;
+      expect(formatFilter((yield* parseEnglish(input)).range)).toEqual({ gte, lt });
+    }),
+  );
+
+  it.effect.each(["February 29", "April 31", "January 0"])(
+    "rejects invalid yearless English date %j",
+    Effect.fn(function* (input) {
+      const error = yield* Effect.flip(parseEnglish(input));
+      expect(error).toBeInstanceOf(NaturalLanguageParseError);
+    }),
+  );
+
+  it.effect.each([
+    ["from January 12", { gte: "now/y+11d" }],
+    ["from 12th of January", { gte: "now/y+11d" }],
+    ["the day before January 12", { gte: "now/y+10d", lt: "now/y+11d" }],
+    ["day before January 2025", { gte: "2025-01-01||-1d", lt: "2025-01-01" }],
+    ["day before yesterday", { gte: "now-1d/d-1d", lt: "now-1d/d" }],
+  ] as const)(
+    "composes English day boundary in %s",
+    Effect.fn(function* (testCase) {
+      const [input, filter] = testCase;
+      expect(formatFilter((yield* parseEnglish(input)).range)).toEqual(filter);
+    }),
+  );
+
   it.effect.each([
     ["weekend", "now/w+5d", "now/w+7d", "this weekend"],
     ["the weekend", "now/w+5d", "now/w+7d", "this weekend"],

@@ -180,6 +180,15 @@ describe("Spanish date ranges", () => {
     }),
   );
 
+  it.effect.each(["12 de enero", "12 enero"])(
+    "maps current-year Spanish date %j",
+    Effect.fn(function* (input) {
+      const result = yield* parseSpanish(input);
+      expect(formatFilter(result.range)).toEqual({ gte: "now/y+11d", lt: "now/y+12d" });
+      expect(yield* formatNatural(result.range, { locale: "es" })).toBe("12 de enero");
+    }, Effect.provide(SpanishLanguageLayer)),
+  );
+
   it.effect.each([
     ["anteayer", "now-2d/d", "now-2d/d+1d"],
     ["pasado mañana", "now+2d/d", "now+2d/d+1d"],

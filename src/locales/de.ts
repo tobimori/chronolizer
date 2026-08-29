@@ -15,6 +15,7 @@ import { normalizeNaturalText } from "../natural/text.ts";
 import {
   calendarPeriodOffset,
   candidate,
+  currentYearDatePeriods,
   datedPeriods,
   datedQuarterPeriods,
   fixedDatePeriod,
@@ -28,6 +29,7 @@ import {
   joinedNowCandidate,
   joinedPeriodCandidate,
   monthOfRelativeYear,
+  namedCurrentYearDatePeriod,
   namedDatePeriod,
   openBoundaryCandidate,
   parseTrailingCount,
@@ -205,6 +207,7 @@ const currentBoundaryPhrases = unitPhrases.flatMap((entry) =>
 );
 
 const relativeAliases = [
+  ["vorgestern", "day", -2, "vorgestern"],
   ["vorletzten tag", "day", -2, "vorletzter tag"],
   ["übernächsten tag", "day", 2, "übernächster tag"],
   ["vorletzte woche", "week", -2, "vorletzte woche"],
@@ -261,6 +264,9 @@ const monthNumber = (value: string) => {
   return shortIndex === -1 ? undefined : shortIndex + 1;
 };
 
+const currentDateLabel = (day: number, month: number) =>
+  `${day}. ${title(textAt(months, month - 1))}`;
+
 const parseNamedDate = (input: string) => {
   const named = EffectString.match(/^([0-3]?\d)\.? ([a-zäöüß]+\.?) (\d{4})$/u)(input);
   if (Option.isSome(named)) {
@@ -286,7 +292,16 @@ const parseNamedDate = (input: string) => {
       }
     }
   }
-  return Option.none<Period>();
+
+  const current = EffectString.match(/^([0-3]?\d)\.? ([a-zäöüß]+\.?)$/u)(input);
+  return Option.isSome(current)
+    ? namedCurrentYearDatePeriod(
+        textAt(current.value, 2),
+        textAt(current.value, 1),
+        monthNumber,
+        currentDateLabel,
+      )
+    : Option.none<Period>();
 };
 
 const quarterNames = ["erstes", "zweites", "drittes", "viertes"] as const;
@@ -447,7 +462,7 @@ const parsePeriod = (input: string) => {
       );
     }
   }
-  const wrapper = ["im ", "für ", "während "].find((prefix) => input.startsWith(prefix));
+  const wrapper = ["im ", "am ", "für ", "während "].find((prefix) => input.startsWith(prefix));
   return parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
 };
 
@@ -653,6 +668,7 @@ const parseGerman = (input: string) => {
 };
 
 const staticPeriodPhrases = [
+  "vorgestern",
   "dieses wochenende",
   "letztes wochenende",
   "nächstes wochenende",
@@ -757,6 +773,7 @@ const renderGerman = (range: DateRangeExpr) => {
 
   const periods = [
     ...staticPeriods,
+    ...currentYearDatePeriods(range, currentDateLabel),
     ...periodsFromPhrases(
       [...datedPeriods(range, months), ...datedQuarterPeriods(range)],
       parsePeriod,

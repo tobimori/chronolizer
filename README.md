@@ -185,7 +185,9 @@ Supported input families include:
 - calendar offsets, such as `30 months ago`;
 - period-to-date ranges, such as `year to date`;
 - fixed months, quarters, years, and explicit date intervals;
-- open ranges, such as `since January 2025` and `before 2020`;
+- named days with or without a year, such as `January 12` and `12th of January`;
+- open ranges, such as `since January 2025` and `from January 12`;
+- compositional boundaries, such as `the day before January 12`;
 - period starts, period ends, and weekends;
 - abbreviated month names and common equivalent phrases.
 
@@ -197,6 +199,7 @@ Examples:
 | `last 3 months`                     | `{ gte: "now-3M", lte: "now" }`            |
 | `30 months ago`                     | `{ gte: "now-30M/M", lt: "now-30M/M+1M" }` |
 | `January 2025`                      | `{ gte: "2025-01-01", lt: "2025-02-01" }`  |
+| `January 12`                        | `{ gte: "now/y+11d", lt: "now/y+12d" }`    |
 | `Q1 2025`                           | `{ gte: "2025-01-01", lt: "2025-04-01" }`  |
 | `01 January 2025 - 31 January 2025` | `{ gte: "2025-01-01", lt: "2025-02-01" }`  |
 | `through January 2025`              | `{ lt: "2025-02-01" }`                     |
@@ -237,6 +240,8 @@ unit       := "d" | "w" | "M" | "q" | "y"
 `/unit` moves a value to the start of its calendar unit. Add `||` before operations on a fixed date, for example `2025-01-01||+1M`.
 
 Complete calendar periods use a half-open interval: the lower bound is inclusive and the next period start is exclusive. Weeks start on Monday.
+
+A named day without a year uses the current calendar year. Write the year for February 29 because parsing does not read the clock.
 
 ## Main API
 

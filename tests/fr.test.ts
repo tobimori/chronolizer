@@ -181,6 +181,15 @@ describe("French date ranges", () => {
     }),
   );
 
+  it.effect.each(["12 janvier", "le 12 janvier"])(
+    "maps current-year French date %j",
+    Effect.fn(function* (input) {
+      const result = yield* parseFrench(input);
+      expect(formatFilter(result.range)).toEqual({ gte: "now/y+11d", lt: "now/y+12d" });
+      expect(yield* formatNatural(result.range, { locale: "fr" })).toBe("12 janvier");
+    }, Effect.provide(FrenchLanguageLayer)),
+  );
+
   it.effect.each([
     ["avant-hier", "now-2d/d", "now-2d/d+1d"],
     ["après-demain", "now+2d/d", "now+2d/d+1d"],

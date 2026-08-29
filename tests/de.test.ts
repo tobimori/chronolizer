@@ -252,6 +252,26 @@ describe("German date ranges", () => {
     }),
   );
 
+  it.effect.each(["12. Januar", "12 Januar", "am 12. Januar"])(
+    "maps current-year German date %j",
+    Effect.fn(function* (input) {
+      const result = yield* parseGerman(input);
+      expect(formatFilter(result.range)).toEqual({ gte: "now/y+11d", lt: "now/y+12d" });
+      expect(yield* formatNatural(result.range, { locale: "de" })).toBe("12. Januar");
+    }, Effect.provide(GermanLanguageLayer)),
+  );
+
+  it.effect.each([
+    ["ab 12. Januar", { gte: "now/y+11d" }],
+    ["vorgestern", { gte: "now-2d/d", lt: "now-2d/d+1d" }],
+  ] as const)(
+    "maps relative German day expression %s",
+    Effect.fn(function* (testCase) {
+      const [input, filter] = testCase;
+      expect(formatFilter((yield* parseGerman(input)).range)).toEqual(filter);
+    }),
+  );
+
   it.effect.each([
     ["Wochenende", "now/w+5d", "now/w+7d", "dieses Wochenende"],
     ["am Wochenende", "now/w+5d", "now/w+7d", "dieses Wochenende"],

@@ -15,6 +15,7 @@ import { normalizeNaturalText } from "../natural/text.ts";
 import {
   calendarPeriodOffset,
   candidate,
+  currentYearDatePeriods,
   datedPeriods,
   datedQuarterPeriods,
   fixedDatePeriod,
@@ -28,6 +29,7 @@ import {
   joinedNowCandidate,
   joinedPeriodCandidate,
   monthOfRelativeYear,
+  namedCurrentYearDatePeriod,
   namedDatePeriod,
   openBoundaryCandidate,
   parseTrailingCount,
@@ -234,6 +236,8 @@ const monthNumber = (value: string) => {
   return short === -1 ? undefined : short + 1;
 };
 
+const currentDateLabel = (day: number, month: number) => `${day} de ${textAt(months, month - 1)}`;
+
 const parseNamedDate = (input: string) => {
   const named = EffectString.match(/^([0-3]?\d)(?: de)? ([a-záéíóúñ]+\.?)(?: de)? (\d{4})$/u)(
     input,
@@ -248,14 +252,28 @@ const parseNamedDate = (input: string) => {
     );
   }
   const numeric = EffectString.match(/^([0-3]?\d)[./-]([01]?\d)[./-](\d{4})$/u)(input);
-  if (Option.isNone(numeric)) return Option.none<Period>();
-  const year = validYear(textAt(numeric.value, 3));
-  const month = Number(textAt(numeric.value, 2));
-  const day = Number(textAt(numeric.value, 1));
-  if (year === undefined || month < 1 || month > 12) return Option.none<Period>();
-  const value = isoDate(year, month, day);
-  return isIsoDate(value) && value !== "9999-12-31"
-    ? Option.some(fixedDatePeriod(value, `${day} de ${textAt(months, month - 1)} de ${year}`))
+  if (Option.isSome(numeric)) {
+    const year = validYear(textAt(numeric.value, 3));
+    const month = Number(textAt(numeric.value, 2));
+    const day = Number(textAt(numeric.value, 1));
+    if (year !== undefined && month >= 1 && month <= 12) {
+      const value = isoDate(year, month, day);
+      if (isIsoDate(value) && value !== "9999-12-31") {
+        return Option.some(
+          fixedDatePeriod(value, `${day} de ${textAt(months, month - 1)} de ${year}`),
+        );
+      }
+    }
+  }
+
+  const current = EffectString.match(/^([0-3]?\d)(?: de)? ([a-záéíóúñ]+\.?)$/u)(input);
+  return Option.isSome(current)
+    ? namedCurrentYearDatePeriod(
+        textAt(current.value, 2),
+        textAt(current.value, 1),
+        monthNumber,
+        currentDateLabel,
+      )
     : Option.none<Period>();
 };
 
@@ -614,6 +632,7 @@ const renderSpanish = (range: DateRangeExpr) => {
   }
   const periods = [
     ...staticPeriods,
+    ...currentYearDatePeriods(range, currentDateLabel),
     ...periodsFromPhrases(
       [...datedPeriods(range, months), ...datedQuarterPeriods(range)],
       parsePeriod,

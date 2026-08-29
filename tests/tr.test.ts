@@ -178,6 +178,15 @@ describe("Turkish date ranges", () => {
     }),
   );
 
+  it.effect.each(["12 ocak", "12. ocak"])(
+    "maps current-year Turkish date %j",
+    Effect.fn(function* (input) {
+      const result = yield* parseTurkish(input);
+      expect(formatFilter(result.range)).toEqual({ gte: "now/y+11d", lt: "now/y+12d" });
+      expect(yield* formatNatural(result.range, { locale: "tr" })).toBe("12 ocak");
+    }, Effect.provide(TurkishLanguageLayer)),
+  );
+
   it.effect.each([
     ["evvelsi gün", "now-2d/d", "now-2d/d+1d"],
     ["öbür gün", "now+2d/d", "now+2d/d+1d"],

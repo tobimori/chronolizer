@@ -182,6 +182,15 @@ describe("Dutch date ranges", () => {
     }),
   );
 
+  it.effect.each(["12 januari", "de 12e van januari"])(
+    "maps current-year Dutch date %j",
+    Effect.fn(function* (input) {
+      const result = yield* parseDutch(input);
+      expect(formatFilter(result.range)).toEqual({ gte: "now/y+11d", lt: "now/y+12d" });
+      expect(yield* formatNatural(result.range, { locale: "nl" })).toBe("12 januari");
+    }, Effect.provide(DutchLanguageLayer)),
+  );
+
   it.effect.each([
     ["eergisteren", "now-2d/d", "now-2d/d+1d"],
     ["overmorgen", "now+2d/d", "now+2d/d+1d"],

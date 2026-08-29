@@ -182,6 +182,15 @@ describe("Polish date ranges", () => {
     }),
   );
 
+  it.effect.each(["12 stycznia", "12. stycznia"])(
+    "maps current-year Polish date %j",
+    Effect.fn(function* (input) {
+      const result = yield* parsePolish(input);
+      expect(formatFilter(result.range)).toEqual({ gte: "now/y+11d", lt: "now/y+12d" });
+      expect(yield* formatNatural(result.range, { locale: "pl" })).toBe("12. stycznia");
+    }, Effect.provide(PolishLanguageLayer)),
+  );
+
   it.effect.each([
     ["przedwczoraj", "now-2d/d", "now-2d/d+1d"],
     ["pojutrze", "now+2d/d", "now+2d/d+1d"],

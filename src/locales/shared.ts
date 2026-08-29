@@ -67,6 +67,9 @@ export const periodStartDay = (period: Period, canonical: string) =>
 export const periodEndDay = (period: Period, canonical: string) =>
   Period.make({ start: shift(period.end, -1, "day"), end: period.end, canonical });
 
+export const periodPreviousDay = (period: Period, canonical: string) =>
+  Period.make({ start: shift(period.start, -1, "day"), end: period.start, canonical });
+
 export const relativeWeekend = (direction: number, canonical: string) => {
   const weekBase = direction === 0 ? now() : shift(now(), direction, "week");
   const weekStart = startOf(weekBase, "week");
@@ -201,6 +204,61 @@ export const namedDatePeriod = (
   const value = isoDate(year, month, day);
   if (!isIsoDate(value) || value === "9999-12-31") return Option.none<Period>();
   return Option.some(fixedDatePeriod(value, canonical(day, month, year)));
+};
+
+const minimumDaysInMonth = (month: number) => daysInMonth(1, month);
+
+const currentYearDatePeriod = (month: number, day: number, canonical: string) => {
+  const yearStart = startOf(now(), "year");
+  const monthStart = month === 1 ? yearStart : shift(yearStart, month - 1, "month");
+  const start = day === 1 ? monthStart : shift(monthStart, day - 1, "day");
+  return Period.make({ start, end: shift(start, 1, "day"), canonical });
+};
+
+export const namedCurrentYearDatePeriod = (
+  monthText: string,
+  dayText: string,
+  monthNumber: (value: string) => number | undefined,
+  canonical: (day: number, month: number) => string,
+) => {
+  const month = monthNumber(monthText);
+  const day = Number(dayText);
+  if (month === undefined || !Number.isInteger(day) || day < 1 || day > minimumDaysInMonth(month)) {
+    return Option.none<Period>();
+  }
+  return Option.some(currentYearDatePeriod(month, day, canonical(day, month)));
+};
+
+const currentYearDate = (expression: string) => {
+  const match = EffectString.match(/^now\/y(?:\+([1-9]\d*)M)?(?:\+([1-9]\d*)d)?$/u)(expression);
+  if (Option.isNone(match)) return Option.none<readonly [month: number, offset: number]>();
+  const month = Number(textAt(match.value, 1) || "0") + 1;
+  const offset = Number(textAt(match.value, 2) || "0");
+  return month >= 1 && month <= 12
+    ? Option.some([month, offset] as const)
+    : Option.none<readonly [month: number, offset: number]>();
+};
+
+export const currentYearDatePeriods = (
+  range: DateRangeExpr,
+  canonical: (day: number, month: number) => string,
+) => {
+  const filter = formatFilter(range);
+  const expressions = [filter.gt, filter.gte, filter.lt, filter.lte];
+  const dates = new Map<string, readonly [month: number, day: number]>();
+  for (const expression of expressions) {
+    if (expression === undefined) continue;
+    const date = currentYearDate(expression);
+    if (Option.isNone(date)) continue;
+    const [month, offset] = date.value;
+    for (const day of [offset, offset + 1]) {
+      if (day < 1 || day > minimumDaysInMonth(month)) continue;
+      dates.set(`${month}-${day}`, [month, day]);
+    }
+  }
+  return [...dates.values()].map(([month, day]) =>
+    currentYearDatePeriod(month, day, canonical(day, month)),
+  );
 };
 
 export const fixedMonthPeriod = (year: number, month: number, canonical: string) => {
