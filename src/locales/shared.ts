@@ -1,4 +1,4 @@
-import { Option, Schema, String as EffectString } from "effect";
+import { Option, RegExp as EffectRegExp, Schema, String as EffectString } from "effect";
 
 import {
   boundedRange,
@@ -24,7 +24,7 @@ import {
   StartOf,
   Unit,
 } from "../ast/schemas.ts";
-import type { DateRangeExpr } from "../ast/schemas.ts";
+import type { DateRangeExpr, IsoDate } from "../ast/schemas.ts";
 import { formatFilter, rangeKey } from "../filter/codec.ts";
 import { formatInstantExpression } from "../filter/expression.ts";
 import { NaturalCandidate } from "../language/model.ts";
@@ -179,6 +179,62 @@ const previousDay = (year: number, month: number, day: number) => {
   return isoDate(year - 1, 12, 31);
 };
 
+type AbsoluteDatePart = "day" | "month" | "year";
+
+interface AbsoluteDateProfile {
+  readonly formatter: Intl.DateTimeFormat;
+  readonly pattern: RegExp;
+  readonly parts: ReadonlyArray<AbsoluteDatePart>;
+}
+
+const absoluteDateProfiles = new Map<string, AbsoluteDateProfile>();
+
+const absoluteDateProfile = (locale: string) => {
+  const cached = absoluteDateProfiles.get(locale);
+  if (cached !== undefined) return cached;
+  const formatter = new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+    numberingSystem: "latn",
+    timeZone: "UTC",
+  });
+  const parts: Array<AbsoluteDatePart> = [];
+  const pattern = formatter
+    .formatToParts(new Date("2006-11-22T00:00:00.000Z"))
+    .map((part) => {
+      if (part.type === "day" || part.type === "month" || part.type === "year") {
+        parts.push(part.type);
+        return part.type === "year" ? "([0-9]{4})" : "([0-9]{1,2})";
+      }
+      return EffectRegExp.escape(part.value);
+    })
+    .join("");
+  const profile = { formatter, pattern: new RegExp(`^${pattern}$`, "u"), parts };
+  absoluteDateProfiles.set(locale, profile);
+  return profile;
+};
+
+export const formatAbsoluteDate = (value: IsoDate, locale: string) =>
+  absoluteDateProfile(locale).formatter.format(new Date(`${value}T00:00:00.000Z`));
+
+const parseLocalizedAbsoluteDate = (input: string, locale: string) => {
+  const profile = absoluteDateProfile(locale);
+  const match = EffectString.match(profile.pattern)(input);
+  if (Option.isNone(match)) return Option.none<IsoDate>();
+  let day = "";
+  let month = "";
+  let year = "";
+  for (const [index, part] of profile.parts.entries()) {
+    const value = textAt(match.value, index + 1);
+    if (part === "day") day = value;
+    if (part === "month") month = value;
+    if (part === "year") year = value;
+  }
+  const value = isoDate(Number(year), Number(month), Number(day));
+  return isIsoDate(value) ? Option.some(value) : Option.none<IsoDate>();
+};
+
 export const fixedDatePeriod = (value: string, canonical: string) => {
   const year = Number(value.slice(0, 4));
   const month = Number(value.slice(5, 7));
@@ -188,6 +244,14 @@ export const fixedDatePeriod = (value: string, canonical: string) => {
     end: dateLiteral(nextDay(year, month, day)),
     canonical,
   });
+};
+
+export const absoluteDatePeriod = (input: string, locale: string) => {
+  const value = isIsoDate(input) ? Option.some(input) : parseLocalizedAbsoluteDate(input, locale);
+  return value.pipe(
+    Option.filter((date) => date !== "9999-12-31"),
+    Option.map((date) => fixedDatePeriod(date, formatAbsoluteDate(date, locale))),
+  );
 };
 
 export const namedDatePeriod = (

@@ -77,7 +77,7 @@ Effect.runPromise(program);
 
 ### Format a range as natural language
 
-`formatNatural` returns the canonical phrase for a range. It preserves the meaning, but it does not reproduce the original wording.
+`formatNatural` returns the canonical phrase for a range. It preserves the meaning, but it does not reproduce the original wording. Absolute days use the locale's numeric `Intl.DateTimeFormat` form.
 
 ```ts
 import { formatNatural, parseFilter } from "chronolizer";

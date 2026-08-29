@@ -13,6 +13,7 @@ import {
 } from "../natural/suggestion.ts";
 import { normalizeNaturalText } from "../natural/text.ts";
 import {
+  absoluteDatePeriod,
   calendarPeriodOffset,
   candidate,
   currentYearDatePeriods,
@@ -349,9 +350,8 @@ const parseQuarter = (input: string) => {
 };
 
 const parseBasePeriod = (input: string) => {
-  if (isIsoDate(input) && input !== "9999-12-31") {
-    return Option.some(fixedDatePeriod(input, input));
-  }
+  const absoluteDate = absoluteDatePeriod(input, "fr");
+  if (Option.isSome(absoluteDate)) return absoluteDate;
   const namedDate = parseNamedDate(input);
   if (Option.isSome(namedDate)) return namedDate;
   const quarter = parseQuarter(input);

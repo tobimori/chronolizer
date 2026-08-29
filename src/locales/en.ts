@@ -1,6 +1,5 @@
 import { Effect, Option, String as EffectString } from "effect";
 
-import { isIsoDate } from "../ast/schemas.ts";
 import type { DateRangeExpr, Unit } from "../ast/schemas.ts";
 import { BaseLanguageContribution } from "../language/model.ts";
 import { defineLanguagePlugin, languagePluginsLayer } from "../language/registry.ts";
@@ -13,12 +12,12 @@ import {
 } from "../natural/suggestion.ts";
 import { normalizeNaturalText } from "../natural/text.ts";
 import {
+  absoluteDatePeriod,
   calendarPeriodOffset,
   candidate,
   currentYearDatePeriods,
   datedPeriods,
   datedQuarterPeriods,
-  fixedDatePeriod,
   fixedMonthPeriod,
   fixedQuarterPeriod,
   fixedYearPeriod,
@@ -248,9 +247,8 @@ const parseNamedDate = (input: string) => {
 };
 
 const parseBasePeriod = (input: string) => {
-  if (isIsoDate(input) && input !== "9999-12-31") {
-    return Option.some(fixedDatePeriod(input, input));
-  }
+  const absoluteDate = absoluteDatePeriod(input, "en");
+  if (Option.isSome(absoluteDate)) return absoluteDate;
 
   const namedDate = parseNamedDate(input);
   if (Option.isSome(namedDate)) return namedDate;
