@@ -33,7 +33,7 @@ const program = parseNatural("January of last year", { locale: "en" }).pipe(
   Effect.provide(EnglishLanguageLayer),
 );
 
-// The program succeeds with:
+Effect.runPromise(program);
 // { gte: "now-1y/y", lt: "now-1y/y+1M" }
 ```
 
@@ -56,7 +56,8 @@ const program = parseNatural("seit Jahresbeginn", { locale: "de" }).pipe(
   Effect.provide(GermanLanguageLayer),
 );
 
-// The program succeeds with { gte: "now/y", lte: "now" }.
+Effect.runPromise(program);
+// { gte: "now/y", lte: "now" }
 ```
 
 Use `languagePluginsLayer` when one application needs more than one language:
@@ -70,6 +71,8 @@ import { Effect } from "effect";
 const Languages = languagePluginsLayer([EnglishLanguage, GermanLanguage, PolishLanguage]);
 
 const program = parseNatural("letzten Monat", { locale: "de" }).pipe(Effect.provide(Languages));
+
+Effect.runPromise(program);
 ```
 
 ### Format a range as natural language
@@ -87,7 +90,8 @@ const program = parseFilter({ gte: "2025-01-01", lt: "2025-02-01" }).pipe(
   Effect.provide(GermanLanguageLayer),
 );
 
-// The program succeeds with "Januar 2025".
+Effect.runPromise(program);
+// "Januar 2025"
 ```
 
 ### Add autocomplete
@@ -103,7 +107,8 @@ const program = suggestNatural("last m", { locale: "en", limit: 5 }).pipe(
   Effect.provide(EnglishLanguageLayer),
 );
 
-// The first suggestion has the text "last month".
+Effect.runPromise(program);
+// [{ text: "last month", range: ... }, ...]
 ```
 
 The default limit is 10. The maximum limit is 100. A nonpositive or invalid limit returns no suggestions.
@@ -148,6 +153,8 @@ const program = parseFilter({ gte: "now/y", lte: "now" }).pipe(
   Effect.flatMap(resolve),
   DateTime.withCurrentZoneNamed("Europe/Berlin"),
 );
+
+Effect.runPromise(program);
 ```
 
 `resolve` uses the Effect clock and `DateTime.CurrentTimeZone`. It does not use the host time zone without your decision.
@@ -163,6 +170,8 @@ import { Effect, Schema } from "effect";
 const program = Schema.decodeUnknownEffect(DateFilter)(externalInput).pipe(
   Effect.flatMap(parseFilter),
 );
+
+Effect.runPromise(program);
 ```
 
 ## Supported expressions
