@@ -3,7 +3,12 @@ import { Effect } from "effect";
 
 import { formatFilter } from "../src/filter/codec.ts";
 import { GermanLanguageLayer } from "../src/locales/de.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
+import {
+  formatNatural,
+  NaturalLanguageParseError,
+  parseNatural,
+  suggestNatural,
+} from "../src/index.ts";
 
 const parseGerman = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "de", typoMode }).pipe(Effect.provide(GermanLanguageLayer));
@@ -535,7 +540,7 @@ describe("German date ranges", () => {
           Effect.provide(GermanLanguageLayer),
         ),
       );
-      expect(error._tag).toBe("NaturalLanguageParseError");
+      expect(error).toBeInstanceOf(NaturalLanguageParseError);
       expect(error.message).toBe(
         "The expression contains a positive relative shift, but future ranges are disabled",
       );
@@ -562,8 +567,8 @@ describe("German date ranges", () => {
     Effect.fn(function* () {
       const shortWord = yield* Effect.flip(parseGerman("mei 2025", "tolerant"));
       const distantWord = yield* Effect.flip(parseGerman("xxxxxxxx 2025", "tolerant"));
-      expect(shortWord._tag).toBe("NaturalLanguageParseError");
-      expect(distantWord._tag).toBe("NaturalLanguageParseError");
+      expect(shortWord).toBeInstanceOf(NaturalLanguageParseError);
+      expect(distantWord).toBeInstanceOf(NaturalLanguageParseError);
     }),
   );
 
@@ -598,7 +603,7 @@ describe("German date ranges", () => {
     "rejects unsupported complete German input %j",
     Effect.fn(function* (input) {
       const error = yield* Effect.flip(parseGerman(input));
-      expect(error._tag).toBe("NaturalLanguageParseError");
+      expect(error).toBeInstanceOf(NaturalLanguageParseError);
       expect(error).toMatchObject({ input, locale: "de" });
     }),
   );

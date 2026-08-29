@@ -3,7 +3,12 @@ import { Effect } from "effect";
 
 import { formatFilter } from "../src/filter/codec.ts";
 import { CzechLanguageLayer } from "../src/locales/cs.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
+import {
+  formatNatural,
+  NaturalLanguageParseError,
+  parseNatural,
+  suggestNatural,
+} from "../src/index.ts";
 
 const parseCzech = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "cs", typoMode }).pipe(Effect.provide(CzechLanguageLayer));
@@ -273,7 +278,7 @@ describe("Czech date ranges", () => {
   it.effect.each(["31. dubna 2025", "29. 2. 2025", "13.13.2025", "leden 20"])(
     "rejects invalid Czech absolute period %j",
     Effect.fn(function* (input) {
-      expect((yield* Effect.flip(parseCzech(input)))._tag).toBe("NaturalLanguageParseError");
+      expect(yield* Effect.flip(parseCzech(input))).toBeInstanceOf(NaturalLanguageParseError);
     }),
   );
 
@@ -281,7 +286,9 @@ describe("Czech date ranges", () => {
     "corrects a Czech typo only in tolerant mode",
     Effect.fn(function* () {
       expect((yield* parseCzech("ledne 2025", "tolerant")).quality).toBe("corrected");
-      expect((yield* Effect.flip(parseCzech("ledne 2025")))._tag).toBe("NaturalLanguageParseError");
+      expect(yield* Effect.flip(parseCzech("ledne 2025"))).toBeInstanceOf(
+        NaturalLanguageParseError,
+      );
     }),
   );
 

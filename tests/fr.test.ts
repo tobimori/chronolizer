@@ -3,7 +3,12 @@ import { Effect } from "effect";
 
 import { formatFilter } from "../src/filter/codec.ts";
 import { FrenchLanguageLayer } from "../src/locales/fr.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
+import {
+  formatNatural,
+  NaturalLanguageParseError,
+  parseNatural,
+  suggestNatural,
+} from "../src/index.ts";
 
 const parseFrench = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "fr", typoMode }).pipe(Effect.provide(FrenchLanguageLayer));
@@ -286,7 +291,7 @@ describe("French date ranges", () => {
     "rejects invalid French absolute period %j",
     Effect.fn(function* (input) {
       const error = yield* Effect.flip(parseFrench(input));
-      expect(error._tag).toBe("NaturalLanguageParseError");
+      expect(error).toBeInstanceOf(NaturalLanguageParseError);
     }),
   );
 
@@ -305,7 +310,7 @@ describe("French date ranges", () => {
     Effect.fn(function* () {
       expect((yield* parseFrench("janver 2025", "tolerant")).quality).toBe("corrected");
       const error = yield* Effect.flip(parseFrench("janver 2025"));
-      expect(error._tag).toBe("NaturalLanguageParseError");
+      expect(error).toBeInstanceOf(NaturalLanguageParseError);
     }),
   );
 

@@ -3,7 +3,13 @@ import { Effect } from "effect";
 
 import { formatFilter, parseFilter } from "../src/filter/codec.ts";
 import { EnglishLanguageLayer } from "../src/locales/en.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
+import {
+  formatNatural,
+  NaturalLanguageParseError,
+  NaturalLanguageRenderError,
+  parseNatural,
+  suggestNatural,
+} from "../src/index.ts";
 
 const parseEnglish = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "en", typoMode }).pipe(Effect.provide(EnglishLanguageLayer));
@@ -567,7 +573,7 @@ describe("English date ranges", () => {
     "does not run typo correction in strict mode",
     Effect.fn(function* () {
       const error = yield* Effect.flip(parseEnglish("januray 2025"));
-      expect(error._tag).toBe("NaturalLanguageParseError");
+      expect(error).toBeInstanceOf(NaturalLanguageParseError);
     }),
   );
 
@@ -577,9 +583,9 @@ describe("English date ranges", () => {
       const badYear = yield* Effect.flip(parseEnglish("January 202", "tolerant"));
       const badDate = yield* Effect.flip(parseEnglish("2025-02-29", "tolerant"));
       const shortMonth = yield* Effect.flip(parseEnglish("mey 2025", "tolerant"));
-      expect(badYear._tag).toBe("NaturalLanguageParseError");
-      expect(badDate._tag).toBe("NaturalLanguageParseError");
-      expect(shortMonth._tag).toBe("NaturalLanguageParseError");
+      expect(badYear).toBeInstanceOf(NaturalLanguageParseError);
+      expect(badDate).toBeInstanceOf(NaturalLanguageParseError);
+      expect(shortMonth).toBeInstanceOf(NaturalLanguageParseError);
     }),
   );
 
@@ -615,7 +621,7 @@ describe("English date ranges", () => {
     "rejects unsupported complete input %j",
     Effect.fn(function* (input) {
       const error = yield* Effect.flip(parseEnglish(input));
-      expect(error._tag).toBe("NaturalLanguageParseError");
+      expect(error).toBeInstanceOf(NaturalLanguageParseError);
       expect(error).toMatchObject({ input, locale: "en" });
     }),
   );
@@ -624,7 +630,7 @@ describe("English date ranges", () => {
     "rejects explicit future range %j when future ranges are disabled",
     Effect.fn(function* (input) {
       const error = yield* Effect.flip(parseEnglishWithoutFuture(input));
-      expect(error._tag).toBe("NaturalLanguageParseError");
+      expect(error).toBeInstanceOf(NaturalLanguageParseError);
       expect(error.message).toBe(
         "The expression contains a positive relative shift, but future ranges are disabled",
       );
@@ -661,7 +667,7 @@ describe("English date ranges", () => {
       const error = yield* Effect.flip(
         formatNatural(range, { locale: "en" }).pipe(Effect.provide(EnglishLanguageLayer)),
       );
-      expect(error._tag).toBe("NaturalLanguageRenderError");
+      expect(error).toBeInstanceOf(NaturalLanguageRenderError);
       expect(error).toMatchObject({
         locale: "en",
         message: "The range has no canonical natural-language form in this locale",

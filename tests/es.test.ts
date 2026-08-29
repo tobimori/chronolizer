@@ -3,7 +3,12 @@ import { Effect } from "effect";
 
 import { formatFilter } from "../src/filter/codec.ts";
 import { SpanishLanguageLayer } from "../src/locales/es.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
+import {
+  formatNatural,
+  NaturalLanguageParseError,
+  parseNatural,
+  suggestNatural,
+} from "../src/index.ts";
 
 const parseSpanish = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "es", typoMode }).pipe(Effect.provide(SpanishLanguageLayer));
@@ -279,7 +284,7 @@ describe("Spanish date ranges", () => {
     "rejects invalid Spanish absolute period %j",
     Effect.fn(function* (input) {
       const error = yield* Effect.flip(parseSpanish(input));
-      expect(error._tag).toBe("NaturalLanguageParseError");
+      expect(error).toBeInstanceOf(NaturalLanguageParseError);
     }),
   );
 
@@ -288,7 +293,7 @@ describe("Spanish date ranges", () => {
     Effect.fn(function* () {
       expect((yield* parseSpanish("enro de 2025", "tolerant")).quality).toBe("corrected");
       const error = yield* Effect.flip(parseSpanish("enro de 2025"));
-      expect(error._tag).toBe("NaturalLanguageParseError");
+      expect(error).toBeInstanceOf(NaturalLanguageParseError);
     }),
   );
 

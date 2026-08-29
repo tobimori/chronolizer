@@ -1,4 +1,4 @@
-import { Match } from "effect";
+import { Match, Schema } from "effect";
 
 import {
   boundedRange,
@@ -13,7 +13,10 @@ import {
   startOf,
   upperOpenRange,
 } from "./constructors.ts";
+import { Shift } from "./schemas.ts";
 import type { DateRangeExpr, InstantExpr, LowerBound, UpperBound } from "./schemas.ts";
+
+const isShift = Schema.is(Shift);
 
 // RETURN TYPE: TypeScript needs the recursive function contract before initialization.
 export const normalizeInstant = (expression: InstantExpr): InstantExpr =>
@@ -24,7 +27,7 @@ export const normalizeInstant = (expression: InstantExpr): InstantExpr =>
     Shift: (operation) => {
       const base = normalizeInstant(operation.base);
       if (operation.amount === 0) return base;
-      if (base._tag === "Shift" && base.unit === operation.unit) {
+      if (isShift(base) && base.unit === operation.unit) {
         const amount = base.amount + operation.amount;
         if (Number.isSafeInteger(amount)) {
           return normalizeInstant(shift(base.base, amount, operation.unit));

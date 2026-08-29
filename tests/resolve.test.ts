@@ -1,10 +1,16 @@
 import { describe, expect, it } from "@effect/vitest";
-import { DateTime, Effect } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 import { TestClock } from "effect/testing";
 
 import { parseFilter } from "../src/filter/codec.ts";
 import type { DateFilter } from "../src/filter/schema.ts";
 import { resolve } from "../src/resolve/resolve.ts";
+import {
+  ResolutionError,
+  ResolvedGreaterThan,
+  ResolvedLessThan,
+  ResolvedLessThanOrEqual,
+} from "../src/resolve/schema.ts";
 import type { ResolvedDateRange } from "../src/resolve/schema.ts";
 
 const setNow = (iso: string) => TestClock.setTime(DateTime.toEpochMillis(DateTime.makeUnsafe(iso)));
@@ -129,8 +135,8 @@ describe("date-range resolution", () => {
     "preserves inclusive and exclusive bound relations",
     Effect.fn(function* () {
       const range = yield* resolveFilter({ gt: "2025-01-01", lte: "2025-01-02" }, "UTC");
-      expect(range.lower?._tag).toBe("GreaterThan");
-      expect(range.upper?._tag).toBe("LessThanOrEqual");
+      expect(Schema.is(ResolvedGreaterThan)(range.lower)).toBe(true);
+      expect(Schema.is(ResolvedLessThanOrEqual)(range.upper)).toBe(true);
       expect(formatEndpoint(range.lower?.value)).toBe("2025-01-01T00:00:00.000+00:00[UTC]");
       expect(formatEndpoint(range.upper?.value)).toBe("2025-01-02T00:00:00.000+00:00[UTC]");
     }),
@@ -141,7 +147,7 @@ describe("date-range resolution", () => {
     Effect.fn(function* () {
       const range = yield* resolveFilter({ lt: "2025-01-01" }, "UTC");
       expect(range.lower).toBeUndefined();
-      expect(range.upper?._tag).toBe("LessThan");
+      expect(Schema.is(ResolvedLessThan)(range.upper)).toBe(true);
     }),
   );
 
@@ -151,7 +157,7 @@ describe("date-range resolution", () => {
       const error = yield* Effect.flip(
         resolveFilter({ gte: "2025-02-01", lt: "2025-01-01" }, "UTC"),
       );
-      expect(error._tag).toBe("ResolutionError");
+      expect(error).toBeInstanceOf(ResolutionError);
       expect(error.message).toBe("The lower range endpoint must be before the upper endpoint");
     }),
   );

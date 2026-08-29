@@ -1,10 +1,15 @@
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 
 import { now, shift, startOf } from "../src/ast/constructors.ts";
 import { completePeriod, formatFilter } from "../src/filter/codec.ts";
 import { EnglishContribution, EnglishLanguage, EnglishLanguageLayer } from "../src/locales/en.ts";
 import { candidate } from "../src/locales/shared.ts";
+import {
+  LanguageConflictError,
+  LanguageRegistrationError,
+  UnsupportedLocaleError,
+} from "../src/language/errors.ts";
 import {
   BaseLanguageContribution,
   Correction,
@@ -135,7 +140,7 @@ describe("language registry", () => {
       const registry = yield* LanguageRegistry;
       expect((yield* registry.resolve("en")).locale).toBe("en");
       const error = yield* Effect.flip(registry.resolve("de"));
-      expect(error._tag).toBe("UnsupportedLocaleError");
+      expect(error).toBeInstanceOf(UnsupportedLocaleError);
     }, Effect.provide(EnglishLanguageLayer)),
   );
 
@@ -222,7 +227,7 @@ describe("language registry", () => {
     Effect.fn(function* () {
       const registry = yield* LanguageRegistry;
       const error = yield* Effect.flip(registry.resolve("not a locale"));
-      expect(error._tag).toBe("UnsupportedLocaleError");
+      expect(error).toBeInstanceOf(UnsupportedLocaleError);
       expect(error.locale).toBe("not a locale");
     }, Effect.provide(LanguageRegistryLayer)),
   );
@@ -296,8 +301,8 @@ describe("language registry", () => {
       const error = yield* Effect.flip(
         Effect.provide(Effect.void, languagePluginsLayer([EnglishLanguage, EnglishLanguage])),
       );
-      if (error._tag !== "LanguageRegistrationError") {
-        return expect.fail(`Expected LanguageRegistrationError, received ${error._tag}`);
+      if (!(error instanceof LanguageRegistrationError)) {
+        return expect.fail("Expected LanguageRegistrationError");
       }
       expect(error.pluginId).toBe("chronolizer/language-en");
     }),
@@ -309,7 +314,7 @@ describe("language registry", () => {
       const error = yield* Effect.flip(
         Effect.provide(Effect.void, languagePluginsLayer([EnglishLanguage, alternatePlugin])),
       );
-      expect(error._tag).toBe("LanguageConflictError");
+      expect(error).toBeInstanceOf(LanguageConflictError);
       expect(error).toMatchObject({
         locale: "en",
         firstPluginId: "chronolizer/language-en",
@@ -331,8 +336,8 @@ describe("language registry", () => {
           { concurrency: "unbounded" },
         ),
       );
-      expect(results.filter((result) => result._tag === "Success")).toHaveLength(1);
-      expect(results.filter((result) => result._tag === "Failure")).toHaveLength(1);
+      expect(results.filter(Result.isSuccess)).toHaveLength(1);
+      expect(results.filter(Result.isFailure)).toHaveLength(1);
     }, Effect.provide(LanguageRegistryLayer)),
   );
 
@@ -342,7 +347,7 @@ describe("language registry", () => {
       const registry = yield* LanguageRegistry;
       yield* Effect.scoped(registry.register("chronolizer/language-en", EnglishContribution));
       const error = yield* Effect.flip(registry.resolve("en"));
-      expect(error._tag).toBe("UnsupportedLocaleError");
+      expect(error).toBeInstanceOf(UnsupportedLocaleError);
       expect(error.locale).toBe("en");
     }, Effect.provide(LanguageRegistryLayer)),
   );

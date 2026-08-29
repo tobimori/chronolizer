@@ -3,7 +3,12 @@ import { Effect } from "effect";
 
 import { formatFilter } from "../src/filter/codec.ts";
 import { DutchLanguageLayer } from "../src/locales/nl.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
+import {
+  formatNatural,
+  NaturalLanguageParseError,
+  parseNatural,
+  suggestNatural,
+} from "../src/index.ts";
 
 const parseDutch = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "nl", typoMode }).pipe(Effect.provide(DutchLanguageLayer));
@@ -287,7 +292,7 @@ describe("Dutch date ranges", () => {
     "rejects invalid Dutch absolute period %j",
     Effect.fn(function* (input) {
       const error = yield* Effect.flip(parseDutch(input));
-      expect(error._tag).toBe("NaturalLanguageParseError");
+      expect(error).toBeInstanceOf(NaturalLanguageParseError);
     }),
   );
 
@@ -296,7 +301,7 @@ describe("Dutch date ranges", () => {
     Effect.fn(function* () {
       expect((yield* parseDutch("janurai 2025", "tolerant")).quality).toBe("corrected");
       const error = yield* Effect.flip(parseDutch("janurai 2025"));
-      expect(error._tag).toBe("NaturalLanguageParseError");
+      expect(error).toBeInstanceOf(NaturalLanguageParseError);
     }),
   );
 

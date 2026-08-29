@@ -34,53 +34,34 @@ export const IsoDate = Schema.String.check(
 ).annotate({ identifier: "IsoDate" });
 export type IsoDate = typeof IsoDate.Type;
 
-export interface Now {
-  readonly _tag: "Now";
-}
+export class Now extends Schema.TaggedClass<Now>()("Now", {}) {}
 
-export interface DateLiteral {
-  readonly _tag: "DateLiteral";
-  readonly value: IsoDate;
-}
-
-export interface Shift {
-  readonly _tag: "Shift";
-  readonly base: InstantExpr;
-  readonly amount: number;
-  readonly unit: Unit;
-}
-
-export interface StartOf {
-  readonly _tag: "StartOf";
-  readonly base: InstantExpr;
-  readonly unit: Unit;
-}
-
-export type InstantExpr = Now | DateLiteral | Shift | StartOf;
-
-export const Now = Schema.TaggedStruct("Now", {});
-export const DateLiteral = Schema.TaggedStruct("DateLiteral", { value: IsoDate });
+export class DateLiteral extends Schema.TaggedClass<DateLiteral>()("DateLiteral", {
+  value: IsoDate,
+}) {}
 
 const ShiftAmount = Schema.Int.check(
   Schema.isBetween({ minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER }),
 );
 
-export const Shift: Schema.Codec<Shift> = Schema.TaggedStruct("Shift", {
+export class Shift extends Schema.TaggedClass<Shift>()("Shift", {
   base: Schema.suspend(
     // RETURN TYPE: TypeScript needs the recursive schema contract before initialization.
     (): Schema.Codec<InstantExpr> => InstantExpr,
   ),
   amount: ShiftAmount,
   unit: Unit,
-});
+}) {}
 
-export const StartOf: Schema.Codec<StartOf> = Schema.TaggedStruct("StartOf", {
+export class StartOf extends Schema.TaggedClass<StartOf>()("StartOf", {
   base: Schema.suspend(
     // RETURN TYPE: TypeScript needs the recursive schema contract before initialization.
     (): Schema.Codec<InstantExpr> => InstantExpr,
   ),
   unit: Unit,
-});
+}) {}
+
+export type InstantExpr = Now | DateLiteral | Shift | StartOf;
 
 export const InstantExpr: Schema.Codec<InstantExpr> = Schema.suspend(
   // RETURN TYPE: TypeScript needs the recursive schema contract before initialization.

@@ -12,7 +12,18 @@ import {
   startOf,
   upperOpenRange,
 } from "../ast/constructors.ts";
-import { daysInMonth, InstantExpr, isIsoDate, Unit } from "../ast/schemas.ts";
+import {
+  daysInMonth,
+  GreaterThanOrEqual,
+  InstantExpr,
+  isIsoDate,
+  LessThan,
+  LessThanOrEqual,
+  Now,
+  Shift,
+  StartOf,
+  Unit,
+} from "../ast/schemas.ts";
 import type { DateRangeExpr } from "../ast/schemas.ts";
 import { formatFilter, rangeKey } from "../filter/codec.ts";
 import { formatInstantExpression } from "../filter/expression.ts";
@@ -27,6 +38,13 @@ export const Period = Schema.Struct({
   canonical: Schema.String,
 });
 export type Period = typeof Period.Type;
+
+const isGreaterThanOrEqual = Schema.is(GreaterThanOrEqual);
+const isLessThan = Schema.is(LessThan);
+const isLessThanOrEqual = Schema.is(LessThanOrEqual);
+const isNow = Schema.is(Now);
+const isShift = Schema.is(Shift);
+const isStartOf = Schema.is(StartOf);
 
 export const periodRange = (period: Period) =>
   boundedRange(greaterThanOrEqual(period.start), lessThan(period.end));
@@ -92,13 +110,14 @@ export const futureRange = (amount: number, unit: Unit) =>
   boundedRange(greaterThanOrEqual(now()), lessThanOrEqual(shift(now(), amount, unit)));
 
 export const trailingPeriod = (range: DateRangeExpr) => {
+  if (!isGreaterThanOrEqual(range.lower) || !isLessThanOrEqual(range.upper)) {
+    return Option.none<typeof TrailingPeriod.Type>();
+  }
   if (
-    range.lower?._tag !== "GreaterThanOrEqual" ||
-    range.upper?._tag !== "LessThanOrEqual" ||
-    range.lower.value._tag !== "Shift" ||
+    !isShift(range.lower.value) ||
     range.lower.value.amount >= 0 ||
-    range.lower.value.base._tag !== "Now" ||
-    range.upper.value._tag !== "Now"
+    !isNow(range.lower.value.base) ||
+    !isNow(range.upper.value)
   ) {
     return Option.none<typeof TrailingPeriod.Type>();
   }
@@ -111,13 +130,14 @@ export const trailingPeriod = (range: DateRangeExpr) => {
 };
 
 export const futurePeriod = (range: DateRangeExpr) => {
+  if (!isGreaterThanOrEqual(range.lower) || !isLessThanOrEqual(range.upper)) {
+    return Option.none<typeof FuturePeriod.Type>();
+  }
   if (
-    range.lower?._tag !== "GreaterThanOrEqual" ||
-    range.upper?._tag !== "LessThanOrEqual" ||
-    range.lower.value._tag !== "Now" ||
-    range.upper.value._tag !== "Shift" ||
+    !isNow(range.lower.value) ||
+    !isShift(range.upper.value) ||
     range.upper.value.amount <= 0 ||
-    range.upper.value.base._tag !== "Now"
+    !isNow(range.upper.value.base)
   ) {
     return Option.none<typeof FuturePeriod.Type>();
   }
@@ -234,25 +254,28 @@ export const monthOfRelativeYear = (month: number, direction: -1 | 0 | 1, canoni
 };
 
 export const calendarPeriodOffset = (range: DateRangeExpr) => {
+  if (!isGreaterThanOrEqual(range.lower) || !isLessThan(range.upper)) {
+    return Option.none<typeof CalendarPeriodOffset.Type>();
+  }
+  const start = range.lower.value;
+  const end = range.upper.value;
   if (
-    range.lower?._tag !== "GreaterThanOrEqual" ||
-    range.upper?._tag !== "LessThan" ||
-    range.lower.value._tag !== "StartOf" ||
-    range.lower.value.base._tag !== "Shift" ||
-    range.lower.value.base.amount === 0 ||
-    range.lower.value.base.base._tag !== "Now" ||
-    range.lower.value.unit !== range.lower.value.base.unit ||
-    range.upper.value._tag !== "Shift" ||
-    range.upper.value.amount !== 1 ||
-    range.upper.value.unit !== range.lower.value.unit ||
-    formatInstantExpression(range.upper.value.base) !== formatInstantExpression(range.lower.value)
+    !isStartOf(start) ||
+    !isShift(start.base) ||
+    start.base.amount === 0 ||
+    !isNow(start.base.base) ||
+    start.unit !== start.base.unit ||
+    !isShift(end) ||
+    end.amount !== 1 ||
+    end.unit !== start.unit ||
+    formatInstantExpression(end.base) !== formatInstantExpression(start)
   ) {
     return Option.none<typeof CalendarPeriodOffset.Type>();
   }
   return Option.some(
     CalendarPeriodOffset.make({
-      amount: range.lower.value.base.amount,
-      unit: range.lower.value.unit,
+      amount: start.base.amount,
+      unit: start.unit,
     }),
   );
 };

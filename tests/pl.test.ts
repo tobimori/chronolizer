@@ -3,7 +3,12 @@ import { Effect } from "effect";
 
 import { formatFilter } from "../src/filter/codec.ts";
 import { PolishLanguageLayer } from "../src/locales/pl.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
+import {
+  formatNatural,
+  NaturalLanguageParseError,
+  parseNatural,
+  suggestNatural,
+} from "../src/index.ts";
 
 const parsePolish = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "pl", typoMode }).pipe(Effect.provide(PolishLanguageLayer));
@@ -297,7 +302,7 @@ describe("Polish date ranges", () => {
   it.effect.each(["31 kwietnia 2025", "29. 2. 2025", "13.13.2025", "styczeń 20"])(
     "rejects invalid Polish absolute period %j",
     Effect.fn(function* (input) {
-      expect((yield* Effect.flip(parsePolish(input)))._tag).toBe("NaturalLanguageParseError");
+      expect(yield* Effect.flip(parsePolish(input))).toBeInstanceOf(NaturalLanguageParseError);
     }),
   );
 
@@ -305,8 +310,8 @@ describe("Polish date ranges", () => {
     "corrects a Polish typo only in tolerant mode",
     Effect.fn(function* () {
       expect((yield* parsePolish("styczen 2025", "tolerant")).quality).toBe("corrected");
-      expect((yield* Effect.flip(parsePolish("styczen 2025")))._tag).toBe(
-        "NaturalLanguageParseError",
+      expect(yield* Effect.flip(parsePolish("styczen 2025"))).toBeInstanceOf(
+        NaturalLanguageParseError,
       );
     }),
   );

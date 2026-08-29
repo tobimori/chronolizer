@@ -11,17 +11,25 @@ function propertyName(property: ESTree.Property): string | undefined {
   return undefined;
 }
 
-/** Require tagged values to come from their Effect-owned constructor. */
+const memberName = (member: ESTree.MemberExpression) => {
+  if (!member.computed && member.property.type === "Identifier") return member.property.name;
+  if (member.computed && member.property.type === "Literal") return member.property.value;
+  return undefined;
+};
+
+/** Require tagged values and checks to use their Effect-owned APIs. */
 export const noManualTagsRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Disallow manual _tag properties in object literals; use an Effect Schema or Effect data constructor.",
+        "Disallow manual _tag construction and access; use Effect Schema, Match, or tagged constructors.",
     },
     messages: {
       manualTag:
         "Do not set `_tag` manually. Use the owning Effect Schema `.make` constructor or an Effect-native tagged constructor.",
+      tagAccess:
+        "Do not access `_tag` directly. Use Effect Schema predicates, Match, or a tagged API predicate.",
     },
   },
   createOnce(context) {
@@ -31,6 +39,11 @@ export const noManualTagsRule = defineRule({
           return;
         }
         context.report({ node, messageId: "manualTag" });
+      },
+      MemberExpression(node) {
+        if (memberName(node) === "_tag") {
+          context.report({ node, messageId: "tagAccess" });
+        }
       },
     };
   },

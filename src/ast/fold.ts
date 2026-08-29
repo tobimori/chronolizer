@@ -1,6 +1,6 @@
-import { Schema } from "effect";
+import { absurd, Schema } from "effect";
 
-import { GreaterThanOrEqual, LessThan, Now, Shift, StartOf } from "./schemas.ts";
+import { DateLiteral, GreaterThanOrEqual, LessThan, Now, Shift, StartOf } from "./schemas.ts";
 import type { DateRangeExpr, InstantExpr, IsoDate, Unit } from "./schemas.ts";
 
 export interface InstantAlgebra<A> {
@@ -10,22 +10,24 @@ export interface InstantAlgebra<A> {
   readonly startOf: (base: A, unit: Unit) => A;
 }
 
+const isDateLiteral = Schema.is(DateLiteral);
+const isGreaterThanOrEqual = Schema.is(GreaterThanOrEqual);
+const isLessThan = Schema.is(LessThan);
+const isNow = Schema.is(Now);
+const isShift = Schema.is(Shift);
+const isStartOf = Schema.is(StartOf);
+
 // RETURN TYPE: TypeScript needs the recursive generic contract before initialization.
 export const foldInstant = <A>(expression: InstantExpr, algebra: InstantAlgebra<A>): A => {
-  switch (expression._tag) {
-    case "Now":
-      return algebra.now();
-    case "DateLiteral":
-      return algebra.dateLiteral(expression.value);
-    case "Shift":
-      return algebra.shift(
-        foldInstant(expression.base, algebra),
-        expression.amount,
-        expression.unit,
-      );
-    case "StartOf":
-      return algebra.startOf(foldInstant(expression.base, algebra), expression.unit);
+  if (isNow(expression)) return algebra.now();
+  if (isDateLiteral(expression)) return algebra.dateLiteral(expression.value);
+  if (isShift(expression)) {
+    return algebra.shift(foldInstant(expression.base, algebra), expression.amount, expression.unit);
   }
+  if (isStartOf(expression)) {
+    return algebra.startOf(foldInstant(expression.base, algebra), expression.unit);
+  }
+  return absurd(expression);
 };
 
 interface RelativeOffset {
@@ -61,12 +63,6 @@ const containsPositiveShiftInstant = (expression: InstantExpr) => {
 export const containsPositiveShift = (range: DateRangeExpr) =>
   (range.lower !== undefined && containsPositiveShiftInstant(range.lower.value)) ||
   (range.upper !== undefined && containsPositiveShiftInstant(range.upper.value));
-
-const isGreaterThanOrEqual = Schema.is(GreaterThanOrEqual);
-const isLessThan = Schema.is(LessThan);
-const isNow = Schema.is(Now);
-const isShift = Schema.is(Shift);
-const isStartOf = Schema.is(StartOf);
 
 export const isCurrentPeriod = (range: DateRangeExpr) => {
   if (!isGreaterThanOrEqual(range.lower) || !isLessThan(range.upper)) return false;

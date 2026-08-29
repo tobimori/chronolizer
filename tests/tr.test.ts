@@ -3,7 +3,12 @@ import { Effect } from "effect";
 
 import { formatFilter } from "../src/filter/codec.ts";
 import { TurkishLanguageLayer } from "../src/locales/tr.ts";
-import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
+import {
+  formatNatural,
+  NaturalLanguageParseError,
+  parseNatural,
+  suggestNatural,
+} from "../src/index.ts";
 
 const parseTurkish = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "tr", typoMode }).pipe(Effect.provide(TurkishLanguageLayer));
@@ -279,7 +284,7 @@ describe("Turkish date ranges", () => {
     "rejects invalid Turkish absolute period %j",
     Effect.fn(function* (input) {
       const error = yield* Effect.flip(parseTurkish(input));
-      expect(error._tag).toBe("NaturalLanguageParseError");
+      expect(error).toBeInstanceOf(NaturalLanguageParseError);
     }),
   );
 
@@ -298,7 +303,7 @@ describe("Turkish date ranges", () => {
     Effect.fn(function* () {
       expect((yield* parseTurkish("ocakk 2025", "tolerant")).quality).toBe("corrected");
       const error = yield* Effect.flip(parseTurkish("ocakk 2025"));
-      expect(error._tag).toBe("NaturalLanguageParseError");
+      expect(error).toBeInstanceOf(NaturalLanguageParseError);
     }),
   );
 
