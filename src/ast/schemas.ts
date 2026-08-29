@@ -1,23 +1,16 @@
-import { Option, Schema, String as EffectString } from "effect";
+import { Match, Option, Schema, String as EffectString } from "effect";
 
 export const Unit = Schema.Literals(["day", "week", "month", "quarter", "year"]);
 export type Unit = typeof Unit.Type;
 
 const isLeapYear = (year: number) => year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
 
-export const daysInMonth = (year: number, month: number) => {
-  switch (month) {
-    case 2:
-      return isLeapYear(year) ? 29 : 28;
-    case 4:
-    case 6:
-    case 9:
-    case 11:
-      return 30;
-    default:
-      return 31;
-  }
-};
+export const daysInMonth = (year: number, month: number) =>
+  Match.value(month).pipe(
+    Match.when(2, () => (isLeapYear(year) ? 29 : 28)),
+    Match.when(Match.is(4, 6, 9, 11), () => 30),
+    Match.orElse(() => 31),
+  );
 
 export const isIsoDate = (value: string) => {
   if (Option.isNone(EffectString.match(/^\d{4}-\d{2}-\d{2}$/)(value))) {

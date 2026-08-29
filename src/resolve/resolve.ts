@@ -18,20 +18,15 @@ import {
   ResolutionError,
 } from "./schema.ts";
 
-const shiftDateTime = (value: DateTime.Zoned, amount: number, unit: Unit) => {
-  switch (unit) {
-    case "day":
-      return DateTime.add(value, { days: amount });
-    case "week":
-      return DateTime.add(value, { weeks: amount });
-    case "month":
-      return DateTime.add(value, { months: amount });
-    case "quarter":
-      return DateTime.add(value, { months: amount * 3 });
-    case "year":
-      return DateTime.add(value, { years: amount });
-  }
-};
+const shiftDateTime = (value: DateTime.Zoned, amount: number, unit: Unit) =>
+  Match.value(unit).pipe(
+    Match.when("day", () => DateTime.add(value, { days: amount })),
+    Match.when("week", () => DateTime.add(value, { weeks: amount })),
+    Match.when("month", () => DateTime.add(value, { months: amount })),
+    Match.when("quarter", () => DateTime.add(value, { months: amount * 3 })),
+    Match.when("year", () => DateTime.add(value, { years: amount })),
+    Match.exhaustive,
+  );
 
 const startOfDateTime = (value: DateTime.Zoned, unit: Unit) => {
   if (unit === "quarter") {

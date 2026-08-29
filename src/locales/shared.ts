@@ -1,4 +1,4 @@
-import { Option, RegExp as EffectRegExp, Schema, String as EffectString } from "effect";
+import { Match, Option, RegExp as EffectRegExp, Schema, String as EffectString } from "effect";
 
 import {
   boundedRange,
@@ -471,18 +471,16 @@ export const periodBoundaryCandidate = (
   period: Period,
   boundary: "since" | "before" | "through" | "after",
   canonical: string,
-) => {
-  switch (boundary) {
-    case "since":
-      return candidate(lowerOpenRange(greaterThanOrEqual(period.start)), canonical);
-    case "before":
-      return candidate(upperOpenRange(lessThan(period.start)), canonical);
-    case "through":
-      return candidate(upperOpenRange(lessThan(period.end)), canonical);
-    case "after":
-      return candidate(lowerOpenRange(greaterThanOrEqual(period.end)), canonical);
-  }
-};
+) =>
+  Match.value(boundary).pipe(
+    Match.when("since", () =>
+      candidate(lowerOpenRange(greaterThanOrEqual(period.start)), canonical),
+    ),
+    Match.when("before", () => candidate(upperOpenRange(lessThan(period.start)), canonical)),
+    Match.when("through", () => candidate(upperOpenRange(lessThan(period.end)), canonical)),
+    Match.when("after", () => candidate(lowerOpenRange(greaterThanOrEqual(period.end)), canonical)),
+    Match.exhaustive,
+  );
 
 export const openBoundaryCandidate = (
   input: string,

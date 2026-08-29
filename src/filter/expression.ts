@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Match } from "effect";
 
 import { dateLiteral, now, shift, startOf } from "../ast/constructors.ts";
 import { foldInstant } from "../ast/fold.ts";
@@ -7,37 +7,25 @@ import { isIsoDate } from "../ast/schemas.ts";
 import type { InstantExpr, IsoDate, Unit } from "../ast/schemas.ts";
 import { FilterExpressionParseError } from "./errors.ts";
 
-const unitFromSymbol = (symbol: string) => {
-  switch (symbol) {
-    case "d":
-      return "day";
-    case "w":
-      return "week";
-    case "M":
-      return "month";
-    case "q":
-      return "quarter";
-    case "y":
-      return "year";
-    default:
-      return undefined;
-  }
-};
+const unitFromSymbol = (symbol: string) =>
+  Match.value(symbol).pipe(
+    Match.when("d", () => "day" as const),
+    Match.when("w", () => "week" as const),
+    Match.when("M", () => "month" as const),
+    Match.when("q", () => "quarter" as const),
+    Match.when("y", () => "year" as const),
+    Match.orElse(() => undefined),
+  );
 
-const symbolFromUnit = (unit: Unit) => {
-  switch (unit) {
-    case "day":
-      return "d";
-    case "week":
-      return "w";
-    case "month":
-      return "M";
-    case "quarter":
-      return "q";
-    case "year":
-      return "y";
-  }
-};
+const symbolFromUnit = (unit: Unit) =>
+  Match.value(unit).pipe(
+    Match.when("day", () => "d"),
+    Match.when("week", () => "w"),
+    Match.when("month", () => "M"),
+    Match.when("quarter", () => "q"),
+    Match.when("year", () => "y"),
+    Match.exhaustive,
+  );
 
 const failAt = (input: string, offset: number, expected: string) =>
   Effect.fail(new FilterExpressionParseError({ input, offset, expected }));

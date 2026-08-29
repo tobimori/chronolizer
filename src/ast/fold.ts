@@ -1,4 +1,4 @@
-import { absurd, Schema } from "effect";
+import { absurd, Match, Schema } from "effect";
 
 import { DateLiteral, GreaterThanOrEqual, LessThan, Now, Shift, StartOf } from "./schemas.ts";
 import type { DateRangeExpr, InstantExpr, IsoDate, Unit } from "./schemas.ts";
@@ -35,20 +35,15 @@ interface RelativeOffset {
   readonly days: number;
 }
 
-const shiftOffset = (base: RelativeOffset, amount: number, unit: Unit) => {
-  switch (unit) {
-    case "year":
-      return { ...base, months: base.months + amount * 12 };
-    case "quarter":
-      return { ...base, months: base.months + amount * 3 };
-    case "month":
-      return { ...base, months: base.months + amount };
-    case "week":
-      return { ...base, days: base.days + amount * 7 };
-    case "day":
-      return { ...base, days: base.days + amount };
-  }
-};
+const shiftOffset = (base: RelativeOffset, amount: number, unit: Unit) =>
+  Match.value(unit).pipe(
+    Match.when("year", () => ({ ...base, months: base.months + amount * 12 })),
+    Match.when("quarter", () => ({ ...base, months: base.months + amount * 3 })),
+    Match.when("month", () => ({ ...base, months: base.months + amount })),
+    Match.when("week", () => ({ ...base, days: base.days + amount * 7 })),
+    Match.when("day", () => ({ ...base, days: base.days + amount })),
+    Match.exhaustive,
+  );
 
 const containsPositiveShiftInstant = (expression: InstantExpr) => {
   const offset = foldInstant<RelativeOffset>(expression, {

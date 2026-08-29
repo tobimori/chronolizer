@@ -1,4 +1,5 @@
 import { defineRule } from "@oxlint/plugins";
+import { Match } from "effect";
 import type { ESTree, Variable } from "@oxlint/plugins";
 
 type BroadTypeKind = "top" | "object" | "record";
@@ -121,23 +122,31 @@ function typesHaveSameSyntax(
 
 function isDefinitelyObjectType(type: ESTree.TSType): boolean {
   const unwrapped = unwrapTypeParentheses(type);
-  switch (unwrapped.type) {
-    case "TSArrayType":
-    case "TSConstructorType":
-    case "TSFunctionType":
-    case "TSMappedType":
-    case "TSObjectKeyword":
-    case "TSTupleType":
-      return true;
-    case "TSTypeLiteral":
-      return unwrapped.members.length > 0;
-    case "TSIntersectionType":
-      return unwrapped.types.every(isDefinitelyObjectType);
-    case "TSTypeOperator":
-      return unwrapped.operator === "readonly" && isDefinitelyObjectType(unwrapped.typeAnnotation);
-    default:
-      return false;
-  }
+  return Match.value(unwrapped).pipe(
+    Match.when(
+      {
+        type: Match.is(
+          "TSArrayType",
+          "TSConstructorType",
+          "TSFunctionType",
+          "TSMappedType",
+          "TSObjectKeyword",
+          "TSTupleType",
+        ),
+      },
+      () => true,
+    ),
+    Match.when({ type: "TSTypeLiteral" }, (literal) => literal.members.length > 0),
+    Match.when({ type: "TSIntersectionType" }, (intersection) =>
+      intersection.types.every(isDefinitelyObjectType),
+    ),
+    Match.when(
+      { type: "TSTypeOperator" },
+      (operator) =>
+        operator.operator === "readonly" && isDefinitelyObjectType(operator.typeAnnotation),
+    ),
+    Match.orElse(() => false),
+  );
 }
 
 function isDefinitelyNarrowerRecordType(type: ESTree.TSType): boolean {
