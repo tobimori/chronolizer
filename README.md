@@ -13,11 +13,11 @@ since January 2025    → { gte: "2025-01-01" }
 
 ## Install Chronolizer
 
+Chronolizer requires Effect 4 and ESM. Install both packages as direct dependencies.
+
 ```sh
 pnpm add chronolizer effect@4.0.0-rc.112
 ```
-
-Chronolizer works only with Effect 4. Install `effect` as a direct dependency. Its natural-language and resolution APIs return Effect values and use Effect services. Keep these values in your Effect program, as the following examples do. Chronolizer also requires ESM.
 
 ## Parse your first date range
 
