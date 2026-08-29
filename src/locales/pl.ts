@@ -9,7 +9,6 @@ import {
   completeNaturalPhrases,
   fixedCalendarPeriodPhrases,
   naturalCount,
-  prefixNaturalPhrases,
 } from "../natural/suggestion.ts";
 import { normalizeNaturalText } from "../natural/text.ts";
 import {
@@ -31,8 +30,8 @@ import {
   monthOfRelativeYear,
   namedCurrentYearDatePeriod,
   namedDatePeriod,
-  openBoundaryCandidate,
   parseTrailingCount,
+  periodBoundaryCandidate,
   periodEndDay,
   periodRange,
   periodsFromPhrases,
@@ -142,8 +141,8 @@ const units: ReadonlyArray<UnitForms> = [
     current: "dzisiaj",
     previous: "wczoraj",
     next: "jutro",
-    toDate: "dzisiaj do tej pory",
-    remaining: "reszta dnia",
+    toDate: "od początku dnia",
+    remaining: "do końca tego dnia",
   },
   {
     unit: "week",
@@ -153,8 +152,8 @@ const units: ReadonlyArray<UnitForms> = [
     current: "ten tydzień",
     previous: "poprzedni tydzień",
     next: "następny tydzień",
-    toDate: "tydzień do dziś",
-    remaining: "reszta tygodnia",
+    toDate: "od początku tygodnia",
+    remaining: "do końca tego tygodnia",
   },
   {
     unit: "month",
@@ -164,8 +163,8 @@ const units: ReadonlyArray<UnitForms> = [
     current: "ten miesiąc",
     previous: "poprzedni miesiąc",
     next: "następny miesiąc",
-    toDate: "miesiąc do dziś",
-    remaining: "reszta miesiąca",
+    toDate: "od początku miesiąca",
+    remaining: "do końca tego miesiąca",
   },
   {
     unit: "quarter",
@@ -175,8 +174,8 @@ const units: ReadonlyArray<UnitForms> = [
     current: "ten kwartał",
     previous: "poprzedni kwartał",
     next: "następny kwartał",
-    toDate: "kwartał do dziś",
-    remaining: "reszta kwartału",
+    toDate: "od początku kwartału",
+    remaining: "do końca tego kwartału",
   },
   {
     unit: "year",
@@ -186,8 +185,8 @@ const units: ReadonlyArray<UnitForms> = [
     current: "ten rok",
     previous: "poprzedni rok",
     next: "następny rok",
-    toDate: "rok do dziś",
-    remaining: "reszta roku",
+    toDate: "od początku roku",
+    remaining: "do końca tego roku",
   },
 ];
 const title = (value: string) => `${value.slice(0, 1).toLocaleUpperCase("pl")}${value.slice(1)}`;
@@ -207,6 +206,31 @@ const unitAliases = [
   ["lata", "year"],
   ["lat", "year"],
 ] as const satisfies ReadonlyArray<readonly [string, Unit]>;
+const declinedUnits = [
+  ["week", "tydzień", "tygodnia", "tygodniem", "tygodniu"],
+  ["month", "miesiąc", "miesiąca", "miesiącem", "miesiącu"],
+  ["quarter", "kwartał", "kwartału", "kwartałem", "kwartale"],
+  ["year", "rok", "roku", "rokiem", "roku"],
+] as const satisfies ReadonlyArray<readonly [Unit, string, string, string, string]>;
+const relativeAdjectives = [
+  [0, "ten", "tego", "tym"],
+  [-1, "poprzedni", "poprzedniego", "poprzednim"],
+  [1, "następny", "następnego", "następnym"],
+] as const;
+const declinedPeriods = declinedUnits.flatMap(
+  ([unit, nominativeNoun, genitiveNoun, instrumentalNoun, locativeNoun]) =>
+    relativeAdjectives.map(
+      ([direction, nominative, genitive, oblique]) =>
+        [
+          `${nominative} ${nominativeNoun}`,
+          unit,
+          direction,
+          `${genitive} ${genitiveNoun}`,
+          `${oblique} ${instrumentalNoun}`,
+          `${oblique} ${locativeNoun}`,
+        ] as const,
+    ),
+);
 const periodAliases = [
   ...units.flatMap((entry) => [
     [entry.current, entry.unit, 0, entry.current] as const,
@@ -221,18 +245,16 @@ const periodAliases = [
   ["przyszły kwartał", "quarter", 1, "następny kwartał"],
   ["zeszły rok", "year", -1, "poprzedni rok"],
   ["przyszły rok", "year", 1, "następny rok"],
-  ["tego tygodnia", "week", 0, "ten tydzień"],
-  ["poprzedniego tygodnia", "week", -1, "poprzedni tydzień"],
-  ["następnego tygodnia", "week", 1, "następny tydzień"],
-  ["tego miesiąca", "month", 0, "ten miesiąc"],
-  ["poprzedniego miesiąca", "month", -1, "poprzedni miesiąc"],
-  ["następnego miesiąca", "month", 1, "następny miesiąc"],
-  ["tego kwartału", "quarter", 0, "ten kwartał"],
-  ["poprzedniego kwartału", "quarter", -1, "poprzedni kwartał"],
-  ["następnego kwartału", "quarter", 1, "następny kwartał"],
-  ["tego roku", "year", 0, "ten rok"],
-  ["poprzedniego roku", "year", -1, "poprzedni rok"],
-  ["następnego roku", "year", 1, "następny rok"],
+  ...declinedPeriods.flatMap(([canonical, unit, direction, genitive, instrumental, locative]) => [
+    [genitive, unit, direction, canonical] as const,
+    [instrumental, unit, direction, canonical] as const,
+    [locative, unit, direction, canonical] as const,
+  ]),
+  ["zeszłym tygodniu", "week", -1, "poprzedni tydzień"],
+  ["zeszłym miesiącu", "month", -1, "poprzedni miesiąc"],
+  ["zeszłym kwartale", "quarter", -1, "poprzedni kwartał"],
+  ["zeszłym roku", "year", -1, "poprzedni rok"],
+  ["dziś", "day", 0, "dzisiaj"],
   ["przedwczoraj", "day", -2, "przedwczoraj"],
   ["pojutrze", "day", 2, "pojutrze"],
   ["przedostatni tydzień", "week", -2, "przedostatni tydzień"],
@@ -242,14 +264,23 @@ const periodAliases = [
   ["przedostatni rok", "year", -2, "przedostatni rok"],
   ["rok po następnym", "year", 2, "rok po następnym"],
 ] as const satisfies ReadonlyArray<readonly [string, Unit, number, string]>;
-const toDatePhrases = units.flatMap((entry) => {
-  const yearAliases =
-    entry.unit === "year"
-      ? ["od początku roku", "od początku roku do dziś", "w tym roku do dziś"]
-      : [];
-  return [entry.toDate, ...yearAliases].map((phrase) => ({ entry, phrase }));
+const legacyToDatePhrases = [
+  "dzisiaj do tej pory",
+  "tydzień do dziś",
+  "miesiąc do dziś",
+  "kwartał do dziś",
+  "rok do dziś",
+] as const;
+const toDatePhrases = units.flatMap((entry, index) => {
+  const aliases = [entry.toDate, textAt(legacyToDatePhrases, index)];
+  if (entry.unit === "year") aliases.push("od początku roku do dziś", "w tym roku do dziś");
+  return aliases.map((phrase) => ({ entry, phrase }));
 });
-const remainingPhrases = units.map((entry) => ({ entry, phrase: entry.remaining }));
+const remainingPhrases = units.flatMap((entry) => {
+  const implicit = entry.remaining.replace("tego ", "");
+  const legacy = entry.remaining.replace("do końca tego", "reszta");
+  return [entry.remaining, implicit, legacy].map((phrase) => ({ entry, phrase }));
+});
 const relativeYearDirection = (value: string) => {
   if (value.includes("poprzed")) return -1;
   if (value.includes("następn")) return 1;
@@ -288,6 +319,25 @@ const withMonthCase = (value: string, forms: ReadonlyArray<string>) => {
   if (month === -1) return value;
   const name = textAt(months, month);
   return `${textAt(forms, month)}${value.slice(name.length)}`;
+};
+
+const periodCaseIndexes = {
+  genitive: 3,
+  instrumental: 4,
+  locative: 5,
+} as const;
+const monthCases = {
+  genitive: monthGenitives,
+  instrumental: monthInstrumentals,
+  locative: monthLocatives,
+} as const;
+type PeriodCase = keyof typeof periodCaseIndexes;
+
+const withPeriodCase = (value: string, grammaticalCase: PeriodCase) => {
+  const period = declinedPeriods.find((entry) => entry[0] === value);
+  return period === undefined
+    ? withMonthCase(value, monthCases[grammaticalCase])
+    : period[periodCaseIndexes[grammaticalCase]];
 };
 
 const parseNamedDate = (input: string) => {
@@ -448,13 +498,15 @@ const parsePeriod = (input: string) => {
     const period = parseBasePeriod(textAt(edge.value, 2));
     if (Option.isSome(period)) {
       const isEnd = textAt(edge.value, 1) === "koniec";
-      const canonical = `${isEnd ? "koniec" : "początek"} ${period.value.canonical}`;
+      const canonical = `${isEnd ? "koniec" : "początek"} ${withPeriodCase(period.value.canonical, "genitive")}`;
       return Option.some(
         isEnd ? periodEndDay(period.value, canonical) : periodStartDay(period.value, canonical),
       );
     }
   }
-  const wrapper = ["w ", "przez ", "cały ", "całe "].find((prefix) => input.startsWith(prefix));
+  const wrapper = ["w ", "we ", "przez ", "cały ", "całe "].find((prefix) =>
+    input.startsWith(prefix),
+  );
   return parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
 };
 
@@ -464,13 +516,15 @@ const countedUnitPattern =
   "dzień|dni|tydzień|tygodnie|tygodni|miesiąc|miesiące|miesięcy|kwartał|kwartały|kwartałów|rok|lata|lat";
 const countedPattern = (source: string) =>
   new RegExp(source.replace("UNIT", countedUnitPattern), "u");
-const calendarPastPattern = countedPattern("^([1-9]\\d*) (UNIT) temu$");
-const calendarFuturePattern = countedPattern("^za ([1-9]\\d*) (UNIT)$");
+const calendarPastPattern = countedPattern("^(?:dokładnie )?(?:([1-9]\\d*) )?(UNIT) temu$");
+const calendarFuturePattern = countedPattern("^za (?:([1-9]\\d*) )?(UNIT)$");
 const rollingPastPatterns = [
   countedPattern("^(?:ostatni|ostatnie|ostatnich|miniony|minione|minionych) ([1-9]\\d*) (UNIT)$"),
+  countedPattern("^w ciągu (?:ostatniego|ostatnich|minionego|minionych) ([1-9]\\d*) (UNIT)$"),
 ];
 const rollingFuturePatterns = [
   countedPattern("^(?:następny|następne|następnych|kolejny|kolejne|kolejnych) ([1-9]\\d*) (UNIT)$"),
+  countedPattern("^w ciągu (?:najbliższego|najbliższych) ([1-9]\\d*) (UNIT)$"),
 ];
 const rollingBarePattern = countedPattern("^([1-9]\\d*) (UNIT)$");
 
@@ -489,13 +543,17 @@ const parseCalendarOffset = (input: string) => {
   const future = EffectString.match(calendarFuturePattern)(input);
   const match = Option.firstSomeOf([past, future]);
   if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
-  const amount = parseTrailingCount(textAt(match.value, 1));
-  const unit = countedUnit(textAt(match.value, 2));
+  const amountText = textAt(match.value, 1);
+  const unitText = textAt(match.value, 2);
+  const amount = parseTrailingCount(amountText || "1");
+  const unit = countedUnit(unitText);
   if (Option.isNone(amount) || unit === undefined) {
     return Option.none<ReturnType<typeof candidate>>();
   }
   const entry = units.find((item) => item.unit === unit);
-  if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
+  if (entry === undefined || (amountText.length === 0 && unitText !== entry.singular)) {
+    return Option.none<ReturnType<typeof candidate>>();
+  }
   const direction = Option.isSome(past) ? -amount.value : amount.value;
   const noun = countNoun(amount.value, entry);
   const canonical = direction < 0 ? `${amount.value} ${noun} temu` : `za ${amount.value} ${noun}`;
@@ -532,27 +590,38 @@ const parseRollingPeriod = (input: string) => {
   );
 };
 
+const boundaries = [
+  ["do początku ", "before", (period: string) => `przed ${withPeriodCase(period, "instrumental")}`],
+  ["począwszy od ", "since", (period: string) => `od ${withPeriodCase(period, "genitive")}`],
+  ["od ", "since", (period: string) => `od ${withPeriodCase(period, "genitive")}`],
+  ["przed ", "before", (period: string) => `przed ${withPeriodCase(period, "instrumental")}`],
+  ["do ", "through", (period: string) => `do ${withPeriodCase(period, "genitive")} włącznie`],
+  ["po ", "after", (period: string) => `po ${withPeriodCase(period, "locative")}`],
+] as const;
+
 const boundaryCandidate = (input: string) => {
   const included = EffectString.match(/^do (.+) włącznie$/u)(input);
   if (Option.isSome(included)) {
-    return openBoundaryCandidate(
-      `do ${textAt(included.value, 1)}`,
-      [["do ", "through"]],
-      parsePeriod,
+    const period = parsePeriod(textAt(included.value, 1));
+    return Option.map(period, (value) =>
+      periodBoundaryCandidate(
+        value,
+        "through",
+        `do ${withPeriodCase(value.canonical, "genitive")} włącznie`,
+      ),
     );
   }
-  return openBoundaryCandidate(
-    input,
-    [
-      ["do początku ", "before"],
-      ["począwszy od ", "since"],
-      ["od ", "since"],
-      ["przed ", "before"],
-      ["do ", "through"],
-      ["po ", "after"],
-    ],
-    parsePeriod,
-  );
+
+  for (const [prefix, boundary, canonical] of boundaries) {
+    if (!input.startsWith(prefix)) continue;
+    const period = parsePeriod(input.slice(prefix.length));
+    if (Option.isSome(period)) {
+      return Option.some(
+        periodBoundaryCandidate(period.value, boundary, canonical(period.value.canonical)),
+      );
+    }
+  }
+  return Option.none<ReturnType<typeof candidate>>();
 };
 
 const parsePolish = (input: string) => {
@@ -577,13 +646,36 @@ const parsePolish = (input: string) => {
     return Option.some(candidate(periodToDateRange(toDate.entry.unit), toDate.entry.toDate));
   }
 
+  const elidedDayRange = EffectString.match(
+    /^(?:(?:między|pomiędzy) ([0-3]?\d)\.? a |([0-3]?\d)\.?[–—])([0-3]?\d)\.? ([a-ząćęłńóśźż]+\.?)(?: (\d{4}))?$/u,
+  )(input);
+  if (Option.isSome(elidedDayRange)) {
+    const lowerDay = textAt(elidedDayRange.value, 1) || textAt(elidedDayRange.value, 2);
+    const upperDay = textAt(elidedDayRange.value, 3);
+    const month = textAt(elidedDayRange.value, 4);
+    const year = textAt(elidedDayRange.value, 5);
+    const suffix = year.length === 0 ? "" : ` ${year}`;
+    const expanded = `między ${lowerDay} ${month}${suffix} a ${upperDay} ${month}${suffix}`;
+    const joined = joinedPeriodCandidate(
+      expanded,
+      [
+        ["między ", " a "],
+        ["pomiędzy ", " a "],
+      ],
+      parsePeriod,
+      (lower, upper) => `od ${lower} do ${upper} włącznie`,
+    );
+    if (Option.isSome(joined)) return joined;
+  }
+
   const nowBounded = joinedNowCandidate(
     input,
     [
       ["od ", " do dziś"],
       ["między ", " a dziś"],
+      ["pomiędzy ", " a dziś"],
     ],
-    ["od dziś do ", "między dziś a "],
+    ["od dziś do ", "między dziś a ", "pomiędzy dziś a "],
     parsePeriod,
     (period) => `od ${period} do dziś`,
     (period) => `od dziś do ${period}`,
@@ -595,6 +687,7 @@ const parsePolish = (input: string) => {
     [
       ["od ", " do "],
       ["między ", " a "],
+      ["pomiędzy ", " a "],
       ["", " - "],
       ["", " – "],
       ["", " — "],
@@ -610,14 +703,28 @@ const parsePolish = (input: string) => {
   );
 };
 
-const staticPeriodPhrases = [
-  ...periodAliases.map((entry) => entry[0]),
+const edgeBasePhrases = [...declinedPeriods.map((entry) => entry[3]), ...monthGenitives];
+const edgePhrases = edgeBasePhrases.flatMap((phrase) => [`początek ${phrase}`, `koniec ${phrase}`]);
+const canonicalPeriodPhrases = [
+  ...units.flatMap((entry) => [entry.current, entry.previous, entry.next]),
+  "przedwczoraj",
+  "pojutrze",
+  "przedostatni tydzień",
+  "tydzień po następnym",
+  "przedostatni miesiąc",
+  "miesiąc po następnym",
+  "przedostatni rok",
+  "rok po następnym",
   "ten weekend",
   "poprzedni weekend",
   "następny weekend",
   "weekend przed poprzednim",
   "weekend po następnym",
-  ...periodAliases.flatMap((entry) => [`początek ${entry[0]}`, `koniec ${entry[0]}`]),
+];
+const staticPeriodPhrases = [
+  ...periodAliases.map((entry) => entry[0]),
+  ...canonicalPeriodPhrases,
+  ...edgePhrases,
   ...[1, 2, 3, 4].flatMap((quarter) => [
     `q${quarter}`,
     `q${quarter} tego roku`,
@@ -628,7 +735,26 @@ const staticPeriodPhrases = [
 ];
 
 const staticPeriods = periodsFromPhrases(staticPeriodPhrases, parsePeriod);
-const boundaryPrefixes = ["od ", "począwszy od ", "przed ", "do ", "po "];
+const monthBoundaryPhrases = months.flatMap((_, index) => {
+  const genitive = textAt(monthGenitives, index);
+  const instrumental = textAt(monthInstrumentals, index);
+  const locative = textAt(monthLocatives, index);
+  return [
+    `od ${genitive}`,
+    `począwszy od ${genitive}`,
+    `przed ${instrumental}`,
+    `do ${genitive} włącznie`,
+    `po ${locative}`,
+  ];
+});
+
+const fixedBoundaryPhrases = (phrases: ReadonlyArray<string>) =>
+  phrases.flatMap((phrase) => [
+    `od ${withMonthCase(phrase, monthGenitives)}`,
+    `przed ${withMonthCase(phrase, monthInstrumentals)}`,
+    `do ${withMonthCase(phrase, monthGenitives)} włącznie`,
+    `po ${withMonthCase(phrase, monthLocatives)}`,
+  ]);
 
 const countedSuggestions = (input: string) => {
   const amount = naturalCount(input);
@@ -646,23 +772,34 @@ const countedSuggestions = (input: string) => {
 };
 
 const polishSuggestionPhrases = [
-  ...units.map((entry) => entry.toDate),
-  ...units.map((entry) => entry.remaining),
-  ...staticPeriodPhrases,
-  ...prefixNaturalPhrases(staticPeriodPhrases, boundaryPrefixes),
+  ...toDatePhrases.map((entry) => entry.phrase),
+  ...remainingPhrases.map((entry) => entry.phrase),
+  ...canonicalPeriodPhrases,
+  ...edgePhrases,
+  ...[1, 2, 3, 4].flatMap((quarter) => [
+    `q${quarter}`,
+    `q${quarter} tego roku`,
+    `q${quarter} poprzedniego roku`,
+    `q${quarter} następnego roku`,
+  ]),
+  ...months,
+  ...monthBoundaryPhrases,
   "do dziś",
   "od teraz",
 ];
 
 const suggestPolish = (input: string, limit: number) => {
-  const fixed = fixedCalendarPeriodPhrases(input, months);
+  const correctedInput = input.startsWith("do koniec")
+    ? `do końca${input.slice("do koniec".length)}`
+    : input;
+  const fixed = fixedCalendarPeriodPhrases(correctedInput, months);
   return completeNaturalPhrases(
-    input,
+    correctedInput,
     [
       ...polishSuggestionPhrases,
       ...fixed,
-      ...prefixNaturalPhrases(fixed, boundaryPrefixes),
-      ...countedSuggestions(input),
+      ...fixedBoundaryPhrases(fixed),
+      ...countedSuggestions(correctedInput),
     ],
     limit,
   );
@@ -713,14 +850,14 @@ const renderPolish = (range: DateRangeExpr) => {
       ...units.map((entry) => candidate(remainingPeriodRange(entry.unit), entry.remaining)),
     ],
     periods,
-    (period) => `od ${withMonthCase(period, monthGenitives)}`,
-    (period) => `przed ${withMonthCase(period, monthInstrumentals)}`,
-    (period) => `do ${withMonthCase(period, monthGenitives)} włącznie`,
-    (period) => `po ${withMonthCase(period, monthLocatives)}`,
+    (period) => `od ${withPeriodCase(period, "genitive")}`,
+    (period) => `przed ${withPeriodCase(period, "instrumental")}`,
+    (period) => `do ${withPeriodCase(period, "genitive")} włącznie`,
+    (period) => `po ${withPeriodCase(period, "locative")}`,
     (lower, upper) =>
-      `od ${withMonthCase(lower, monthGenitives)} do ${withMonthCase(upper, monthGenitives)} włącznie`,
-    (period) => `od ${withMonthCase(period, monthGenitives)} do dziś`,
-    (period) => `od dziś do ${withMonthCase(period, monthGenitives)}`,
+      `od ${withPeriodCase(lower, "genitive")} do ${withPeriodCase(upper, "genitive")} włącznie`,
+    (period) => `od ${withPeriodCase(period, "genitive")} do dziś`,
+    (period) => `od dziś do ${withPeriodCase(period, "genitive")}`,
     () => "do dziś",
     () => "od teraz",
   );
@@ -744,23 +881,30 @@ export const PolishContribution = new BaseLanguageContribution({
     ]),
     ...toDatePhrases.flatMap((entry) => entry.phrase.split(" ")),
     ...remainingPhrases.flatMap((entry) => entry.phrase.split(" ")),
+    ...periodAliases.flatMap((entry) => entry[0].split(" ")),
+    "ciągu",
+    "dokładnie",
     "dziś",
     "dotychczas",
     "koniec",
+    "końca",
     "kolejne",
     "między",
     "minione",
+    "najbliższych",
     "następne",
     "od",
     "ostatnie",
     "po",
     "początek",
     "począwszy",
+    "pomiędzy",
     "poprzedni",
     "przed",
     "teraz",
     "temu",
     "włącznie",
+    "we",
     "za",
   ],
   normalize: normalizeNaturalText,

@@ -21,6 +21,7 @@ const suggestPolish = (input: string, limit = 10, allowFuture = true) =>
 describe("Polish date ranges", () => {
   it.effect.each([
     ["dzisiaj", "now/d", "now/d+1d"],
+    ["dziś", "now/d", "now/d+1d"],
     ["wczoraj", "now-1d/d", "now-1d/d+1d"],
     ["jutro", "now+1d/d", "now+1d/d+1d"],
     ["poprzedni tydzień", "now-1w/w", "now-1w/w+1w"],
@@ -53,32 +54,43 @@ describe("Polish date ranges", () => {
     Effect.fn(function* (input) {
       const result = yield* parsePolish(input);
       expect(formatFilter(result.range)).toEqual({ gte: "now/y", lte: "now" });
-      expect(yield* formatNatural(result.range, { locale: "pl" })).toBe("rok do dziś");
+      expect(yield* formatNatural(result.range, { locale: "pl" })).toBe("od początku roku");
     }, Effect.provide(PolishLanguageLayer)),
   );
 
   it.effect.each([
-    "ostatnie 3 miesiące",
-    "minione 3 miesiące",
-    "ostatnich 5 miesięcy",
-    "5 miesięcy",
-  ])(
-    "canonicalizes Polish counted-month variant %j",
-    Effect.fn(function* (input) {
+    ["od początku tygodnia", "now/w"],
+    ["od początku miesiąca", "now/M"],
+    ["od początku kwartału", "now/q"],
+  ] as const)(
+    "maps idiomatic Polish period-to-date phrase %s",
+    Effect.fn(function* (testCase) {
+      const [input, gte] = testCase;
       const result = yield* parsePolish(input);
-      const amount = input.includes("5") ? 5 : 3;
+      expect(formatFilter(result.range)).toEqual({ gte, lte: "now" });
+      expect(yield* formatNatural(result.range, { locale: "pl" })).toBe(input);
+    }, Effect.provide(PolishLanguageLayer)),
+  );
+
+  it.effect.each([
+    ["ostatnie 6 miesięcy", 6, "ostatnich 6 miesięcy"],
+    ["ostatnich 6 miesięcy", 6, "ostatnich 6 miesięcy"],
+    ["minione 3 miesiące", 3, "ostatnie 3 miesiące"],
+    ["5 miesięcy", 5, "ostatnich 5 miesięcy"],
+  ] as const)(
+    "canonicalizes Polish counted-month variant %s",
+    Effect.fn(function* (testCase) {
+      const [input, amount, canonical] = testCase;
+      const result = yield* parsePolish(input);
       expect(formatFilter(result.range)).toEqual({ gte: `now-${amount}M`, lte: "now" });
-      const noun = amount === 5 ? "miesięcy" : "miesiące";
-      const modifier = amount === 5 ? "ostatnich" : "ostatnie";
-      expect(yield* formatNatural(result.range, { locale: "pl" })).toBe(
-        `${modifier} ${amount} ${noun}`,
-      );
+      expect(yield* formatNatural(result.range, { locale: "pl" })).toBe(canonical);
     }, Effect.provide(PolishLanguageLayer)),
   );
 
   it.effect.each([
     ["ostatni 1 dzień", "now-1d", "ostatni 1 dzień"],
     ["ostatnie 3 tygodnie", "now-3w", "ostatnie 3 tygodnie"],
+    ["w ciągu ostatnich 3 tygodni", "now-3w", "ostatnie 3 tygodnie"],
     ["ostatnich 5 miesięcy", "now-5M", "ostatnich 5 miesięcy"],
     ["ostatnich 12 kwartałów", "now-12q", "ostatnich 12 kwartałów"],
     ["ostatnie 2 lata", "now-2y", "ostatnie 2 lata"],
@@ -95,6 +107,7 @@ describe("Polish date ranges", () => {
   it.effect.each([
     ["następne 2 dni", "now+2d"],
     ["kolejne 3 tygodnie", "now+3w"],
+    ["w ciągu najbliższych 3 tygodni", "now+3w"],
     ["następnych 5 miesięcy", "now+5M"],
     ["kolejnych 12 kwartałów", "now+12q"],
     ["następne 3 lata", "now+3y"],
@@ -109,8 +122,11 @@ describe("Polish date ranges", () => {
   it.effect.each([
     ["30 miesięcy temu", "now-30M/M", "now-30M/M+1M", "30 miesięcy temu"],
     ["za 2 tygodnie", "now+2w/w", "now+2w/w+1w", "za 2 tygodnie"],
+    ["za tydzień", "now+1w/w", "now+1w/w+1w", "następny tydzień"],
     ["za 5 lat", "now+5y/y", "now+5y/y+1y", "za 5 lat"],
     ["1 dzień temu", "now-1d/d", "now-1d/d+1d", "wczoraj"],
+    ["rok temu", "now-1y/y", "now-1y/y+1y", "poprzedni rok"],
+    ["dokładnie miesiąc temu", "now-1M/M", "now-1M/M+1M", "poprzedni miesiąc"],
   ] as const)(
     "maps Polish calendar offset %s",
     Effect.fn(function* (testCase) {
@@ -205,6 +221,21 @@ describe("Polish date ranges", () => {
   );
 
   it.effect.each([
+    ["w tym tygodniu", "now/w", "now/w+1w"],
+    ["w styczniu", "now/y", "now/y+1M"],
+    ["we wrześniu", "now/y+8M", "now/y+9M"],
+    ["w zeszłym miesiącu", "now-1M/M", "now-1M/M+1M"],
+    ["w tym kwartale", "now/q", "now/q+1q"],
+    ["w zeszłym roku", "now-1y/y", "now-1y/y+1y"],
+  ] as const)(
+    "maps contextual Polish calendar period %s",
+    Effect.fn(function* (testCase) {
+      const [input, gte, lt] = testCase;
+      expect(formatFilter((yield* parsePolish(input)).range)).toEqual({ gte, lt });
+    }),
+  );
+
+  it.effect.each([
     ["styczeń poprzedniego roku", "now-1y/y", "now-1y/y+1M"],
     ["marzec tego roku", "now/y+2M", "now/y+3M"],
     ["grudzień następnego roku", "now+1y/y+11M", "now+1y/y+12M"],
@@ -218,6 +249,12 @@ describe("Polish date ranges", () => {
 
   it.effect.each([
     ["od stycznia 2025", { gte: "2025-01-01" }],
+    ["od stycznia", { gte: "now/y" }],
+    ["od 12 stycznia", { gte: "now/y+11d" }],
+    ["od tego miesiąca", { gte: "now/M" }],
+    ["przed tym miesiącem", { lt: "now/M" }],
+    ["do tego miesiąca", { lt: "now/M+1M" }],
+    ["po tym miesiącu", { gte: "now/M+1M" }],
     ["począwszy od stycznia 2025", { gte: "2025-01-01" }],
     ["przed styczniem 2025", { lt: "2025-01-01" }],
     ["do stycznia 2025", { lt: "2025-02-01" }],
@@ -238,6 +275,8 @@ describe("Polish date ranges", () => {
     ["przed styczniem 2025", "przed styczniem 2025"],
     ["do stycznia 2025", "przed lutym 2025"],
     ["po styczniu 2025", "od lutego 2025"],
+    ["od tego miesiąca", "od tego miesiąca"],
+    ["przed tym miesiącem", "przed tym miesiącem"],
   ] as const)(
     "renders Polish month boundary %s with the required case",
     Effect.fn(function* (testCase) {
@@ -250,6 +289,7 @@ describe("Polish date ranges", () => {
   it.effect.each([
     "od stycznia 2025 do marca 2025",
     "między styczniem 2025 a marcem 2025",
+    "pomiędzy styczniem 2025 a marcem 2025",
     "styczeń 2025 - marzec 2025",
   ])(
     "maps Polish joined range %j",
@@ -258,6 +298,18 @@ describe("Polish date ranges", () => {
       expect(formatFilter(result.range)).toEqual({ gte: "2025-01-01", lt: "2025-04-01" });
       expect(yield* formatNatural(result.range, { locale: "pl" })).toBe("Q1 2025");
     }, Effect.provide(PolishLanguageLayer)),
+  );
+
+  it.effect.each([
+    ["między 1 a 15 sierpnia", "now/y+7M", "now/y+7M+15d"],
+    ["pomiędzy 1 a 15 sierpnia 2025", "2025-08-01", "2025-08-16"],
+    ["1–15 sierpnia 2025", "2025-08-01", "2025-08-16"],
+  ] as const)(
+    "maps Polish joined range with an elided month in %s",
+    Effect.fn(function* (testCase) {
+      const [input, gte, lt] = testCase;
+      expect(formatFilter((yield* parsePolish(input)).range)).toEqual({ gte, lt });
+    }),
   );
 
   it.effect.each([
@@ -297,19 +349,29 @@ describe("Polish date ranges", () => {
   );
 
   it.effect.each([
-    ["reszta miesiąca", "now/M+1M"],
-    ["reszta tygodnia", "now/w+1w"],
-    ["reszta roku", "now/y+1y"],
+    ["do końca tego miesiąca", "now/M+1M", "do końca tego miesiąca"],
+    ["do końca miesiąca", "now/M+1M", "do końca tego miesiąca"],
+    ["reszta miesiąca", "now/M+1M", "do końca tego miesiąca"],
+    ["do końca tygodnia", "now/w+1w", "do końca tego tygodnia"],
+    ["do końca roku", "now/y+1y", "do końca tego roku"],
   ] as const)(
-    "maps Polish remaining period %s",
+    "maps Polish remaining-period phrase %s",
     Effect.fn(function* (testCase) {
-      const [input, lt] = testCase;
-      expect(formatFilter((yield* parsePolish(input)).range)).toEqual({ gte: "now", lt });
-    }),
+      const [input, lt, canonical] = testCase;
+      const result = yield* parsePolish(input);
+      expect(formatFilter(result.range)).toEqual({ gte: "now", lt });
+      expect(yield* formatNatural(result.range, { locale: "pl" })).toBe(canonical);
+    }, Effect.provide(PolishLanguageLayer)),
   );
 
-  it.effect.each(["31 kwietnia 2025", "29. 2. 2025", "13.13.2025", "styczeń 20"])(
-    "rejects invalid Polish absolute period %j",
+  it.effect.each([
+    "31 kwietnia 2025",
+    "29. 2. 2025",
+    "13.13.2025",
+    "styczeń 20",
+    "do koniec miesiąca",
+  ])(
+    "rejects invalid Polish period %j",
     Effect.fn(function* (input) {
       expect(yield* Effect.flip(parsePolish(input))).toBeInstanceOf(NaturalLanguageParseError);
     }),
@@ -329,7 +391,9 @@ describe("Polish date ranges", () => {
     ["następny m", "następny miesiąc"],
     ["sty", "Styczeń"],
     ["ostatnie 3 mies", "ostatnie 3 miesiące"],
-    ["od sty", "od Styczeń"],
+    ["od sty", "od stycznia"],
+    ["do końca mies", "do końca tego miesiąca"],
+    ["do koniec mies", "do końca tego miesiąca"],
   ] as const)(
     "suggests Polish completion for %j",
     Effect.fn(function* (testCase) {
@@ -337,6 +401,16 @@ describe("Polish date ranges", () => {
       const [suggestion] = yield* suggestPolish(input);
       if (suggestion === undefined) return expect.fail("Expected a suggestion");
       expect(suggestion.text).toBe(expected);
+    }),
+  );
+
+  it.effect(
+    "does not suggest invalid Polish case combinations",
+    Effect.fn(function* () {
+      const suggestions = yield* suggestPolish("do kon", 20);
+      expect(suggestions.length).toBeGreaterThan(0);
+      expect(suggestions.every((entry) => entry.text.startsWith("do końca"))).toBe(true);
+      expect(suggestions.some((entry) => entry.text.includes("do koniec"))).toBe(false);
     }),
   );
 
