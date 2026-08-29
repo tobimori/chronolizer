@@ -87,12 +87,7 @@ const TrailingCount = Schema.Int.check(
   Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }),
 );
 
-const TrailingPeriod = Schema.Struct({
-  amount: TrailingCount,
-  unit: Unit,
-});
-
-const FuturePeriod = Schema.Struct({
+const CountedPeriod = Schema.Struct({
   amount: TrailingCount,
   unit: Unit,
 });
@@ -120,7 +115,7 @@ export const futureRange = (amount: number, unit: Unit) =>
 
 export const trailingPeriod = (range: DateRangeExpr) => {
   if (!isGreaterThanOrEqual(range.lower) || !isLessThanOrEqual(range.upper)) {
-    return Option.none<typeof TrailingPeriod.Type>();
+    return Option.none<typeof CountedPeriod.Type>();
   }
   if (
     !isShift(range.lower.value) ||
@@ -128,10 +123,10 @@ export const trailingPeriod = (range: DateRangeExpr) => {
     !isNow(range.lower.value.base) ||
     !isNow(range.upper.value)
   ) {
-    return Option.none<typeof TrailingPeriod.Type>();
+    return Option.none<typeof CountedPeriod.Type>();
   }
   return Option.some(
-    TrailingPeriod.make({
+    CountedPeriod.make({
       amount: -range.lower.value.amount,
       unit: range.lower.value.unit,
     }),
@@ -140,7 +135,7 @@ export const trailingPeriod = (range: DateRangeExpr) => {
 
 export const futurePeriod = (range: DateRangeExpr) => {
   if (!isGreaterThanOrEqual(range.lower) || !isLessThanOrEqual(range.upper)) {
-    return Option.none<typeof FuturePeriod.Type>();
+    return Option.none<typeof CountedPeriod.Type>();
   }
   if (
     !isNow(range.lower.value) ||
@@ -148,10 +143,10 @@ export const futurePeriod = (range: DateRangeExpr) => {
     range.upper.value.amount <= 0 ||
     !isNow(range.upper.value.base)
   ) {
-    return Option.none<typeof FuturePeriod.Type>();
+    return Option.none<typeof CountedPeriod.Type>();
   }
   return Option.some(
-    FuturePeriod.make({
+    CountedPeriod.make({
       amount: range.upper.value.amount,
       unit: range.upper.value.unit,
     }),

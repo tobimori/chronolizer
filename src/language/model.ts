@@ -23,11 +23,14 @@ export const NaturalCorrectionCandidate = Schema.Struct({
 });
 export type NaturalCorrectionCandidate = typeof NaturalCorrectionCandidate.Type;
 
-export const NaturalAlternative = Schema.Struct({
-  canonical: Schema.String,
+export const NaturalCandidate = Schema.Struct({
   range: DateRangeExpr,
+  canonical: Schema.String,
 });
-export type NaturalAlternative = typeof NaturalAlternative.Type;
+export type NaturalCandidate = typeof NaturalCandidate.Type;
+
+export const NaturalAlternative = NaturalCandidate;
+export type NaturalAlternative = NaturalCandidate;
 
 export const NaturalParseResult = Schema.Struct({
   range: DateRangeExpr,
@@ -36,12 +39,6 @@ export const NaturalParseResult = Schema.Struct({
   alternatives: Schema.Array(NaturalAlternative),
 });
 export type NaturalParseResult = typeof NaturalParseResult.Type;
-
-export const NaturalCandidate = Schema.Struct({
-  range: DateRangeExpr,
-  canonical: Schema.String,
-});
-export type NaturalCandidate = typeof NaturalCandidate.Type;
 
 export const NaturalSuggestion = Schema.Struct({
   text: Schema.String,

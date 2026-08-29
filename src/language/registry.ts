@@ -17,12 +17,7 @@ import {
   LanguageRegistrationError,
   UnsupportedLocaleError,
 } from "./errors.ts";
-import {
-  BaseLanguageMetadata,
-  canonicalBaseLocale,
-  LanguageContributionMetadata,
-  LanguageExtensionMetadata,
-} from "./model.ts";
+import { canonicalBaseLocale, LanguageContributionMetadata } from "./model.ts";
 import { normalizeNaturalText } from "../natural/text.ts";
 import type {
   BaseLanguageContribution,
@@ -31,7 +26,6 @@ import type {
   LanguageExtensionContribution,
   LanguagePlugin,
   LanguagePluginContext,
-  NaturalCandidate,
 } from "./model.ts";
 
 interface RegisteredContribution {
@@ -63,21 +57,6 @@ export namespace LanguageRegistry {
 export class LanguageRegistry extends Context.Service<LanguageRegistry, LanguageRegistry.Service>()(
   "chronolizer/LanguageRegistry",
 ) {}
-
-const metadataOf = (contribution: LanguageContribution) =>
-  Match.valueTags(contribution, {
-    BaseLanguage: (base) =>
-      BaseLanguageMetadata.make({
-        locale: base.locale,
-        vocabulary: base.vocabulary,
-      }),
-    LanguageExtension: (extension) =>
-      LanguageExtensionMetadata.make({
-        locale: extension.locale,
-        priority: extension.priority,
-        vocabulary: extension.vocabulary,
-      }),
-  });
 
 const localeCandidates = (locale: string) => {
   const candidates = [locale];
@@ -142,14 +121,8 @@ const compileLanguage = (locale: string, registered: ReadonlyArray<RegisteredCon
       (suggest) => suggest !== undefined,
     ),
   );
-  const parseExact = (input: string) => {
-    const candidates: Array<NaturalCandidate> = [];
-    for (const parser of parsers) {
-      const candidate = parser(input);
-      if (Option.isSome(candidate)) candidates.push(candidate.value);
-    }
-    return candidates;
-  };
+  const parseExact = (input: string) =>
+    EffectArray.flatMap(parsers, (parser) => Option.toArray(parser(input)));
 
   return Option.some<CompiledLanguage>(
     Object.freeze({
@@ -172,10 +145,7 @@ const createRegistry = Effect.fn(function* () {
     pluginId: string,
     contribution: LanguageContribution,
   ) {
-    if (
-      pluginId.length === 0 ||
-      !Schema.is(LanguageContributionMetadata)(metadataOf(contribution))
-    ) {
+    if (pluginId.length === 0 || !Schema.is(LanguageContributionMetadata)(contribution)) {
       return yield* new LanguageRegistrationError({
         pluginId,
         locale: contribution.locale,
