@@ -32,7 +32,8 @@ describe("English date ranges", () => {
     ["jaun", "January", { gte: "now/y", lt: "now/y+1M" }],
     ["last 3 mon", "last 3 months", { gte: "now-3M", lte: "now" }],
     ["since jan", "since January", { gte: "now/y" }],
-    ["rest of m", "rest of month", { gte: "now", lt: "now/M+1M" }],
+    ["rest of m", "rest of the month", { gte: "now", lt: "now/M+1M" }],
+    ["past m", "past month", { gte: "now-1M", lte: "now" }],
     ["in 3 y", "in 3 years", { gte: "now+3y/y", lt: "now+3y/y+1y" }],
     ["yaer to d", "year to date", { gte: "now/y", lte: "now" }],
   ] as const)(
@@ -109,6 +110,7 @@ describe("English date ranges", () => {
     ["last year", "now-1y/y", "now-1y/y+1y"],
     ["this year", "now/y", "now/y+1y"],
     ["next year", "now+1y/y", "now+1y/y+1y"],
+    ["current calendar month", "now/M", "now/M+1M"],
   ] as const)(
     "parses relative calendar period %s",
     Effect.fn(function* (testCase) {
@@ -175,6 +177,9 @@ describe("English date ranges", () => {
   );
 
   it.effect.each([
+    ["past month", "now-1M"],
+    ["the past month", "now-1M"],
+    ["this past month", "now-1M"],
     ["last 2 days", "now-2d"],
     ["last 2 weeks", "now-2w"],
     ["last 2 months", "now-2M"],
@@ -190,6 +195,8 @@ describe("English date ranges", () => {
   );
 
   it.effect.each([
+    ["within the next month", "now+1M"],
+    ["over the coming week", "now+1w"],
     ["next 2 days", "now+2d"],
     ["coming 2 weeks", "now+2w"],
     ["in the next 2 months", "now+2M"],
@@ -290,6 +297,8 @@ describe("English date ranges", () => {
 
   it.effect.each([
     ["01 January 2025", "2025-01-01", "2025-01-02"],
+    ["the 1st of January 2025", "2025-01-01", "2025-01-02"],
+    ["January the 31st, 2025", "2025-01-31", "2025-02-01"],
     ["January 31, 2025", "2025-01-31", "2025-02-01"],
     ["1st Jan 2025", "2025-01-01", "2025-01-02"],
     ["29th Feb. 2024", "2024-02-29", "2024-03-01"],
@@ -302,7 +311,14 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect.each(["January 12", "12 January", "12th January", "12th of January"])(
+  it.effect.each([
+    "January 12",
+    "January the 12th",
+    "12 January",
+    "12th January",
+    "12th of January",
+    "the 12th of January",
+  ])(
     "maps current-year English date %j",
     Effect.fn(function* (input) {
       const result = yield* parseEnglish(input);
@@ -413,6 +429,10 @@ describe("English date ranges", () => {
     ["until the end of January 2025", { lt: "2025-02-01" }],
     ["up to and including January 2025", { lt: "2025-02-01" }],
     ["up to including January 2025", { lt: "2025-02-01" }],
+    ["on or before January 2025", { lt: "2025-02-01" }],
+    ["on or after January 2025", { gte: "2025-01-01" }],
+    ["earlier than January 2025", { lt: "2025-01-01" }],
+    ["later than January 2025", { gte: "2025-02-01" }],
     ["after January 2025", { gte: "2025-02-01" }],
     ["after the end of January 2025", { gte: "2025-02-01" }],
     ["since the year 2020", { gte: "2020-01-01" }],
@@ -446,7 +466,7 @@ describe("English date ranges", () => {
     Effect.fn(function* (input) {
       const result = yield* parseEnglish(input);
       expect(formatFilter(result.range)).toEqual({ gte: "now", lt: "now/w+1w" });
-      expect(yield* formatNatural(result.range, { locale: "en" })).toBe("rest of week");
+      expect(yield* formatNatural(result.range, { locale: "en" })).toBe("rest of the week");
     }, Effect.provide(EnglishLanguageLayer)),
   );
 
@@ -499,6 +519,7 @@ describe("English date ranges", () => {
   it.effect.each([
     ["from January 2025 to now", { gte: "2025-01-01", lte: "now" }, "from January 2025 to now"],
     ["between January 2025 and now", { gte: "2025-01-01", lte: "now" }, "from January 2025 to now"],
+    ["from January 2025 to date", { gte: "2025-01-01", lte: "now" }, "from January 2025 to now"],
     ["from now through January 2027", { gte: "now", lt: "2027-02-01" }, "from now to January 2027"],
     ["between now and January 2027", { gte: "now", lt: "2027-02-01" }, "from now to January 2027"],
   ] as const)(
@@ -509,6 +530,18 @@ describe("English date ranges", () => {
       expect(formatFilter(result.range)).toEqual(expected);
       expect(yield* formatNatural(result.range, { locale: "en" })).toBe(canonical);
     }, Effect.provide(EnglishLanguageLayer)),
+  );
+
+  it.effect.each([
+    ["January 1–15, 2025", "2025-01-01", "2025-01-16"],
+    ["1st through 15th January 2025", "2025-01-01", "2025-01-16"],
+    ["January 1-15", "now/y", "now/y+15d"],
+  ] as const)(
+    "maps English range with an elided month in %s",
+    Effect.fn(function* (testCase) {
+      const [input, gte, lt] = testCase;
+      expect(formatFilter((yield* parseEnglish(input)).range)).toEqual({ gte, lt });
+    }),
   );
 
   it.effect(
@@ -652,7 +685,6 @@ describe("English date ranges", () => {
     "February 29 2025",
     "9999-12-31",
     "January 2025 extra",
-    "past month",
     "0 months",
     "1 months",
     "2 month",
