@@ -434,7 +434,32 @@ const rollingBarePattern = countedPattern("^([1-9]\\d*) (UNIT)$");
 const firstPatternMatch = (input: string, patterns: ReadonlyArray<RegExp>) =>
   Option.firstSomeOf(patterns.map((pattern) => EffectString.match(pattern)(input)));
 
+const singularRollingCanonical = (entry: UnitForms, future: boolean) =>
+  future ? `önümüzdeki bir ${entry.singular}` : `son bir ${entry.singular}`;
+
+const singularRollingPhrases = units.flatMap((entry) => [
+  { phrase: `son bir ${entry.singular}`, entry, future: false },
+  { phrase: `bir ${entry.singular} boyunca`, entry, future: false },
+  { phrase: `geçtiğimiz bir ${entry.singular}`, entry, future: false },
+  { phrase: `önümüzdeki bir ${entry.singular}`, entry, future: true },
+  { phrase: `bugünden itibaren bir ${entry.singular} boyunca`, entry, future: true },
+]);
+
+const singularCalendarOffsets = units.flatMap((entry) => [
+  { phrase: `bir ${entry.singular} önce`, entry, direction: -1 },
+  { phrase: `bir ${entry.singular} sonra`, entry, direction: 1 },
+]);
+
 const parseCalendarOffset = (input: string) => {
+  const singular = singularCalendarOffsets.find((entry) => entry.phrase === input);
+  if (singular !== undefined) {
+    return Option.some(
+      candidate(
+        periodRange(relativePeriod(singular.entry.unit, singular.direction, singular.phrase)),
+        singular.phrase,
+      ),
+    );
+  }
   const past = EffectString.match(calendarPastPattern)(input);
   const future = firstPatternMatch(input, calendarFuturePatterns);
   const match = Option.firstSomeOf([past, future]);
@@ -454,6 +479,13 @@ const parseCalendarOffset = (input: string) => {
 };
 
 const parseRollingPeriod = (input: string) => {
+  const singular = singularRollingPhrases.find((entry) => entry.phrase === input);
+  if (singular !== undefined) {
+    const range = singular.future
+      ? futureRange(1, singular.entry.unit)
+      : trailingRange(1, singular.entry.unit);
+    return Option.some(candidate(range, singularRollingCanonical(singular.entry, singular.future)));
+  }
   const since = EffectString.match(rollingSincePattern)(input);
   const past = firstPatternMatch(input, rollingPastPatterns);
   const bare = EffectString.match(rollingBarePattern)(input);
@@ -469,9 +501,41 @@ const parseRollingPeriod = (input: string) => {
   if (entry === undefined) return Option.none<ReturnType<typeof candidate>>();
   const isFuture = Option.isSome(future);
   const range = isFuture ? futureRange(amount.value, unit) : trailingRange(amount.value, unit);
+  if (amount.value === 1) {
+    return Option.some(candidate(range, singularRollingCanonical(entry, isFuture)));
+  }
   const modifier = isFuture ? "gelecek" : "son";
-  const noun = amount.value === 1 ? entry.singular : entry.plural;
-  return Option.some(candidate(range, `${modifier} ${amount.value} ${noun}`));
+  return Option.some(candidate(range, `${modifier} ${amount.value} ${entry.plural}`));
+};
+
+const parseElidedDateRange = (input: string) => {
+  const full = EffectString.match(
+    /^([0-3]?\d)(?:\.)? ([a-zçğıöşü]+\.?)'?(?:den|dan|ten|tan) ([0-3]?\d)(?:\.)? ([a-zçğıöşü]+\.?)'?(?:e|a|ye|ya) kadar$/u,
+  )(input);
+  if (Option.isSome(full)) {
+    return joinedPeriodCandidate(
+      `${textAt(full.value, 1)} ${textAt(full.value, 2)} ile ${textAt(full.value, 3)} ${textAt(full.value, 4)}`,
+      [["", " ile "]],
+      parsePeriod,
+      (lower, upper) => `${lower} ile ${upper} arası`,
+    );
+  }
+  const elided = EffectString.match(
+    /^([0-3]?\d)(?:\.)? ([a-zçğıöşü]+\.?)'?(?:den|dan|ten|tan) ([0-3]?\d)'?(?:sine|sına|üne|una|ine|ına) kadar$/u,
+  )(input);
+  const dashed = EffectString.match(/^([0-3]?\d)[–—-]([0-3]?\d) ([a-zçğıöşü]+\.?)$/u)(input);
+  const match = Option.firstSomeOf([elided, dashed]);
+  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  const isElided = Option.isSome(elided);
+  const lowerDay = textAt(match.value, 1);
+  const upperDay = textAt(match.value, isElided ? 3 : 2);
+  const month = textAt(match.value, isElided ? 2 : 3);
+  return joinedPeriodCandidate(
+    `${lowerDay} ${month} ile ${upperDay} ${month}`,
+    [["", " ile "]],
+    parsePeriod,
+    (lower, upper) => `${lower} ile ${upper} arası`,
+  );
 };
 
 const suffixBoundary = (input: string) => {
@@ -532,6 +596,9 @@ const parseTurkish = (input: string) => {
     return Option.some(candidate(periodToDateRange(toDate.entry.unit), toDate.entry.toDate));
   }
 
+  const elided = parseElidedDateRange(input);
+  if (Option.isSome(elided)) return elided;
+
   const joinedInput = input.endsWith(" arası") ? input.slice(0, -6) : input;
   const nowBounded = joinedNowCandidate(
     joinedInput,
@@ -561,8 +628,8 @@ const parseTurkish = (input: string) => {
   if (Option.isSome(bounded)) return bounded;
   const boundary = boundaryCandidate(input);
   if (Option.isSome(boundary)) return boundary;
-  return Option.map(parsePeriod(input), (period) =>
-    candidate(periodRange(period), period.canonical),
+  return parsePeriod(input).pipe(
+    Option.map((period) => candidate(periodRange(period), period.canonical)),
   );
 };
 
@@ -623,6 +690,8 @@ const countedSuggestions = (input: string) => {
 const turkishSuggestionPhrases = [
   ...units.map((entry) => entry.toDate),
   ...units.map((entry) => entry.remaining),
+  ...singularRollingPhrases.map((entry) => entry.phrase),
+  ...singularCalendarOffsets.map((entry) => entry.phrase),
   ...staticPeriodPhrases,
   ...prefixNaturalPhrases(staticPeriodPhrases, boundaryPrefixes),
   "şimdiye kadar",
@@ -661,16 +730,22 @@ const renderTurkish = (range: DateRangeExpr) => {
   if (Option.isSome(future)) {
     const entry = units.find((unit) => unit.unit === future.value.unit);
     if (entry !== undefined) {
-      const noun = future.value.amount === 1 ? entry.singular : entry.plural;
-      return Option.some(`gelecek ${future.value.amount} ${noun}`);
+      return Option.some(
+        future.value.amount === 1
+          ? singularRollingCanonical(entry, true)
+          : `gelecek ${future.value.amount} ${entry.plural}`,
+      );
     }
   }
   const trailing = trailingPeriod(range);
   if (Option.isSome(trailing)) {
     const entry = units.find((unit) => unit.unit === trailing.value.unit);
     if (entry !== undefined) {
-      const noun = trailing.value.amount === 1 ? entry.singular : entry.plural;
-      return Option.some(`son ${trailing.value.amount} ${noun}`);
+      return Option.some(
+        trailing.value.amount === 1
+          ? singularRollingCanonical(entry, false)
+          : `son ${trailing.value.amount} ${entry.plural}`,
+      );
     }
   }
   const periods = [

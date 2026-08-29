@@ -75,6 +75,31 @@ describe("Turkish date ranges", () => {
   );
 
   it.effect.each([
+    ["son bir ay", "now-1M", "son bir ay"],
+    ["bir hafta boyunca", "now-1w", "son bir hafta"],
+    ["geçtiğimiz bir yıl", "now-1y", "son bir yıl"],
+  ] as const)(
+    "distinguishes rolling Turkish singular period %s",
+    Effect.fn(function* (testCase) {
+      const [input, gte, canonical] = testCase;
+      const result = yield* parseTurkish(input);
+      expect(formatFilter(result.range)).toEqual({ gte, lte: "now" });
+      expect(yield* formatNatural(result.range, { locale: "tr" })).toBe(canonical);
+    }, Effect.provide(TurkishLanguageLayer)),
+  );
+
+  it.effect.each([
+    ["önümüzdeki bir ay", "now+1M"],
+    ["bugünden itibaren bir hafta boyunca", "now+1w"],
+  ] as const)(
+    "maps rolling Turkish singular future %s",
+    Effect.fn(function* (testCase) {
+      const [input, lte] = testCase;
+      expect(formatFilter((yield* parseTurkish(input)).range)).toEqual({ gte: "now", lte });
+    }),
+  );
+
+  it.effect.each([
     ["son 2 gün", "now-2d"],
     ["son 2 hafta", "now-2w"],
     ["son 2 ay", "now-2M"],
@@ -107,6 +132,8 @@ describe("Turkish date ranges", () => {
     ["2 hafta sonra", "now+2w/w", "now+2w/w+1w", "2 hafta sonra"],
     ["3 yıl içinde", "now+3y/y", "now+3y/y+1y", "3 yıl sonra"],
     ["1 gün önce", "now-1d/d", "now-1d/d+1d", "dün"],
+    ["bir ay önce", "now-1M/M", "now-1M/M+1M", "geçen ay"],
+    ["bir hafta sonra", "now+1w/w", "now+1w/w+1w", "gelecek hafta"],
   ] as const)(
     "maps Turkish calendar offset %s",
     Effect.fn(function* (testCase) {
@@ -239,6 +266,18 @@ describe("Turkish date ranges", () => {
       expect(formatFilter(result.range)).toEqual({ gte: "2025-01-01", lt: "2025-04-01" });
       expect(yield* formatNatural(result.range, { locale: "tr" })).toBe("Ç1 2025");
     }, Effect.provide(TurkishLanguageLayer)),
+  );
+
+  it.effect.each([
+    ["2 ekim'den 22 ekim'e kadar", "now/y+9M+1d", "now/y+9M+22d"],
+    ["2 nisan'dan 7'sine kadar", "now/y+3M+1d", "now/y+3M+7d"],
+    ["2–7 nisan", "now/y+3M+1d", "now/y+3M+7d"],
+  ] as const)(
+    "maps elided Turkish date range %s",
+    Effect.fn(function* (testCase) {
+      const [input, gte, lt] = testCase;
+      expect(formatFilter((yield* parseTurkish(input)).range)).toEqual({ gte, lt });
+    }),
   );
 
   it.effect.each([
