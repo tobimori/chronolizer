@@ -1,6 +1,6 @@
 import { Array as EffectArray } from "effect";
 
-import { containsPositiveShift } from "../ast/fold.ts";
+import { containsPositiveShift, isCurrentPeriod } from "../ast/fold.ts";
 import type { NaturalCandidate } from "../language/model.ts";
 
 export const applyFuturePolicy = (
@@ -8,5 +8,8 @@ export const applyFuturePolicy = (
   allowFuture: boolean | undefined,
 ) =>
   allowFuture === false
-    ? EffectArray.filter(candidates, (candidate) => !containsPositiveShift(candidate.range))
+    ? EffectArray.filter(
+        candidates,
+        (candidate) => isCurrentPeriod(candidate.range) || !containsPositiveShift(candidate.range),
+      )
     : candidates;

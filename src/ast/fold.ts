@@ -1,3 +1,6 @@
+import { Schema } from "effect";
+
+import { GreaterThanOrEqual, LessThan, Now, Shift, StartOf } from "./schemas.ts";
 import type { DateRangeExpr, InstantExpr, IsoDate, Unit } from "./schemas.ts";
 
 export interface InstantAlgebra<A> {
@@ -58,3 +61,18 @@ const containsPositiveShiftInstant = (expression: InstantExpr) => {
 export const containsPositiveShift = (range: DateRangeExpr) =>
   (range.lower !== undefined && containsPositiveShiftInstant(range.lower.value)) ||
   (range.upper !== undefined && containsPositiveShiftInstant(range.upper.value));
+
+const isGreaterThanOrEqual = Schema.is(GreaterThanOrEqual);
+const isLessThan = Schema.is(LessThan);
+const isNow = Schema.is(Now);
+const isShift = Schema.is(Shift);
+const isStartOf = Schema.is(StartOf);
+
+export const isCurrentPeriod = (range: DateRangeExpr) => {
+  if (!isGreaterThanOrEqual(range.lower) || !isLessThan(range.upper)) return false;
+  const start = range.lower.value;
+  const end = range.upper.value;
+  if (!isStartOf(start) || !isNow(start.base) || !isShift(end)) return false;
+  if (end.amount !== 1 || !isStartOf(end.base) || !isNow(end.base.base)) return false;
+  return start.unit === end.unit && start.unit === end.base.unit;
+};

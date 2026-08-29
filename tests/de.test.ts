@@ -8,6 +8,11 @@ import { formatNatural, parseNatural, suggestNatural } from "../src/index.ts";
 const parseGerman = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "de", typoMode }).pipe(Effect.provide(GermanLanguageLayer));
 
+const parseGermanWithoutFuture = (input: string) =>
+  parseNatural(input, { locale: "de", allowFuture: false }).pipe(
+    Effect.provide(GermanLanguageLayer),
+  );
+
 const suggestGerman = (input: string, limit = 10, allowFuture = true) =>
   suggestNatural(input, { locale: "de", limit, allowFuture }).pipe(
     Effect.provide(GermanLanguageLayer),
@@ -46,6 +51,14 @@ describe("German date ranges", () => {
     "removes positive German completions when future ranges are disabled",
     Effect.fn(function* () {
       expect(yield* suggestGerman("nächster m", 10, false)).toEqual([]);
+    }),
+  );
+
+  it.effect(
+    "keeps current-period German completions when future ranges are disabled",
+    Effect.fn(function* () {
+      const suggestions = yield* suggestGerman("dieser m", 10, false);
+      expect(suggestions.map((suggestion) => suggestion.text)).toContain("dieser Monat");
     }),
   );
   it.effect.each([
@@ -496,6 +509,21 @@ describe("German date ranges", () => {
       }).pipe(Effect.provide(GermanLanguageLayer));
       expect(renderedComplete).toBe("Januar 2025");
       expect(renderedOpen).toBe("seit Januar 2025");
+    }),
+  );
+
+  it.effect.each([
+    ["heute", "now/d", "now/d+1d"],
+    ["diese Woche", "now/w", "now/w+1w"],
+    ["dieser Monat", "now/M", "now/M+1M"],
+    ["dieses Quartal", "now/q", "now/q+1q"],
+    ["dieses Jahr", "now/y", "now/y+1y"],
+  ] as const)(
+    "keeps complete German current period %s when future ranges are disabled",
+    Effect.fn(function* (testCase) {
+      const [input, gte, lt] = testCase;
+      const result = yield* parseGermanWithoutFuture(input);
+      expect(formatFilter(result.range)).toEqual({ gte, lt });
     }),
   );
 

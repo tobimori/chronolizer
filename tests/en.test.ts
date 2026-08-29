@@ -79,6 +79,14 @@ describe("English date ranges", () => {
       expect(yield* suggestEnglish("next m", 10, false)).toEqual([]);
     }),
   );
+
+  it.effect(
+    "keeps current-period completions when future ranges are disabled",
+    Effect.fn(function* () {
+      const suggestions = yield* suggestEnglish("this m", 10, false);
+      expect(suggestions.map((suggestion) => suggestion.text)).toContain("this month");
+    }),
+  );
   it.effect.each([
     ["today", "now/d", "now/d+1d"],
     ["yesterday", "now-1d/d", "now-1d/d+1d"],
@@ -612,14 +620,29 @@ describe("English date ranges", () => {
     }),
   );
 
-  it.effect.each(["next month", "in 3 years", "next 3 weeks", "this year"])(
-    "rejects positive relative range %j when future ranges are disabled",
+  it.effect.each(["tomorrow", "next month", "in 3 years", "next 3 weeks"])(
+    "rejects explicit future range %j when future ranges are disabled",
     Effect.fn(function* (input) {
       const error = yield* Effect.flip(parseEnglishWithoutFuture(input));
       expect(error._tag).toBe("NaturalLanguageParseError");
       expect(error.message).toBe(
         "The expression contains a positive relative shift, but future ranges are disabled",
       );
+    }),
+  );
+
+  it.effect.each([
+    ["today", "now/d", "now/d+1d"],
+    ["this week", "now/w", "now/w+1w"],
+    ["this month", "now/M", "now/M+1M"],
+    ["this quarter", "now/q", "now/q+1q"],
+    ["this year", "now/y", "now/y+1y"],
+  ] as const)(
+    "keeps complete current period %s when future ranges are disabled",
+    Effect.fn(function* (testCase) {
+      const [input, gte, lt] = testCase;
+      const result = yield* parseEnglishWithoutFuture(input);
+      expect(formatFilter(result.range)).toEqual({ gte, lt });
     }),
   );
 

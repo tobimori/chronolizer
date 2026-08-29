@@ -128,7 +128,7 @@ The successful value contains its `quality`, applied `corrections`, and any sema
 
 ### Exclude future relative ranges
 
-Set `allowFuture` to `false` for fields that accept only past relative ranges:
+Set `allowFuture` to `false` to reject explicit relative future ranges:
 
 ```ts
 const program = parseNatural("next 3 months", {
@@ -137,7 +137,9 @@ const program = parseNatural("next 3 months", {
 });
 ```
 
-This option rejects positive relative forms such as `next month` and `in 3 years`. It does not compare fixed dates, such as `January 2099`, with the current date. Parsing does not read the clock.
+This option rejects forms such as `next month`, `next 3 weeks`, and `in 3 years`. It keeps complete current calendar periods such as `today`, `this week`, and `this month`. It does not change them to period-to-date ranges.
+
+The option does not compare fixed dates, such as `January 2099`, with the current date. Parsing does not read the clock.
 
 The same option is available in `suggestNatural`.
 
