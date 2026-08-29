@@ -15,7 +15,11 @@ import {
   absoluteDatePeriod,
   calendarPeriodOffset,
   candidate,
+  compoundCountAliases,
+  sequentialCountAliases,
+  countAliasVocabulary,
   currentYearDatePeriods,
+  decimalTens,
   datedPeriods,
   datedQuarterPeriods,
   fixedDatePeriod,
@@ -43,6 +47,9 @@ import {
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
+  compileCountAliasNormalizer,
+  decomposeShiftedPeriodRange,
+  shiftPeriod,
   textAt,
   trailingPeriod,
   trailingRange,
@@ -65,6 +72,63 @@ const months = [
   "listopad",
   "grudzień",
 ] as const;
+const polishCountWords = [
+  ["dwa", "dwie", "dwóch"],
+  ["trzy"],
+  ["cztery"],
+  ["pi\u0119\u0107"],
+  ["sześć"],
+  ["siedem"],
+  ["osiem"],
+  ["dziewięć"],
+  ["dziesięć"],
+  ["jedenaście"],
+  ["dwanaście"],
+  ["trzynaście"],
+  ["czternaście"],
+  ["piętnaście"],
+  ["szesnaście"],
+  ["siedemnaście"],
+  ["osiemnaście"],
+  ["dziewiętnaście"],
+  ["dwadzieścia"],
+] as const;
+const polishCountOnes = [
+  [1, "jeden"],
+  [2, "dwa"],
+  [3, "trzy"],
+  [4, "cztery"],
+  [5, "pi\u0119\u0107"],
+  [6, "sześć"],
+  [7, "siedem"],
+  [8, "osiem"],
+  [9, "dziewięć"],
+] as const;
+const polishCountAliases = [
+  ...sequentialCountAliases([["jeden", "jedna", "jedno"]], 1),
+  ...sequentialCountAliases(polishCountWords, 2),
+  ...compoundCountAliases(
+    decimalTens([
+      "dwadzieścia",
+      "trzydzieści",
+      "czterdzieści",
+      "pięćdziesiąt",
+      "sześćdziesiąt",
+      "siedemdziesiąt",
+      "osiemdziesiąt",
+      "dziewięćdziesiąt",
+    ]),
+    polishCountOnes,
+    (ten, one) => [`${ten} ${one}`],
+  ),
+];
+const normalizePolishCounts = compileCountAliasNormalizer(polishCountAliases);
+const polishCountVocabulary = new Set(countAliasVocabulary(polishCountAliases));
+const correctPolish = (input: string, vocabulary: ReadonlyArray<string>) =>
+  correctWhitespaceSeparatedText(input, vocabulary, polishCountVocabulary);
+const normalizePolish = (input: string, locale: string) =>
+  normalizePolishCounts(normalizeNaturalText(input, locale));
+
 const monthGenitives = [
   "stycznia",
   "lutego",
@@ -492,7 +556,27 @@ const parseBasePeriod = (input: string) => {
   return Option.none<Period>();
 };
 
-const parsePeriod = (input: string) => {
+// RETURN TYPE: Recursive period offsets require an explicit result type.
+const parsePeriod = (input: string): Option.Option<Period> => {
+  const shifted = EffectString.match(
+    /^(.+) (?:([1-9]\d*) (dzień|dni|tydzień|tygodnie|tygodni|miesiąc|miesiące|miesięcy|kwartał|kwartały|kwartałów|rok|lata|lat) (temu)|za ([1-9]\d*) (dzień|dni|tydzień|tygodnie|tygodni|miesiąc|miesiące|miesięcy|kwartał|kwartały|kwartałów|rok|lata|lat))$/u,
+  )(input);
+  if (Option.isSome(shifted)) {
+    const past = textAt(shifted.value, 4) === "temu";
+    const amount = parseTrailingCount(textAt(shifted.value, past ? 2 : 5));
+    const alias = unitAliases.find((unit) => unit[0] === textAt(shifted.value, past ? 3 : 6));
+    const entry = alias === undefined ? undefined : units.find((unit) => unit.unit === alias[1]);
+    const period = parsePeriod(textAt(shifted.value, 1));
+    if (Option.isSome(amount) && entry !== undefined && Option.isSome(period)) {
+      const direction = past ? -amount.value : amount.value;
+      const noun = countNoun(amount.value, entry);
+      const canonical = past
+        ? `${period.value.canonical} ${amount.value} ${noun} temu`
+        : `${period.value.canonical} za ${amount.value} ${noun}`;
+      return Option.some(shiftPeriod(period.value, direction, entry.unit, canonical));
+    }
+  }
+
   const edge = EffectString.match(/^(początek|koniec) (.+)$/u)(input);
   if (Option.isSome(edge)) {
     const period = parseBasePeriod(textAt(edge.value, 2));
@@ -807,7 +891,23 @@ const suggestPolish = (input: string, limit: number) => {
   );
 };
 
-const renderPolish = (range: DateRangeExpr) => {
+// RETURN TYPE: Recursive shifted-period rendering requires an explicit result type.
+const renderPolish = (range: DateRangeExpr): Option.Option<string> => {
+  const shifted = decomposeShiftedPeriodRange(range);
+  if (Option.isSome(shifted)) {
+    const base = renderPolish(shifted.value.baseRange);
+    const entry = units.find((unit) => unit.unit === shifted.value.unit);
+    if (Option.isSome(base) && entry !== undefined) {
+      const amount = Math.abs(shifted.value.amount);
+      const noun = countNoun(amount, entry);
+      return Option.some(
+        shifted.value.amount < 0
+          ? `${base.value} ${amount} ${noun} temu`
+          : `${base.value} za ${amount} ${noun}`,
+      );
+    }
+  }
+
   const offset = calendarPeriodOffset(range);
   if (Option.isSome(offset) && Math.abs(offset.value.amount) > 1) {
     const entry = units.find((unit) => unit.unit === offset.value.unit);
@@ -909,8 +1009,8 @@ export const PolishContribution = new BaseLanguageContribution({
     "we",
     "za",
   ],
-  normalize: normalizeNaturalText,
-  correct: correctWhitespaceSeparatedText,
+  normalize: normalizePolish,
+  correct: correctPolish,
   parseExact: parsePolish,
   suggest: suggestPolish,
   render: renderPolish,

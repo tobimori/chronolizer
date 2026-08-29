@@ -16,7 +16,11 @@ import {
   absoluteDatePeriod,
   calendarPeriodOffset,
   candidate,
+  compoundCountAliases,
+  sequentialCountAliases,
+  countAliasVocabulary,
   currentYearDatePeriods,
+  decimalTens,
   datedPeriods,
   datedQuarterPeriods,
   fixedDatePeriod,
@@ -44,6 +48,9 @@ import {
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
+  compileCountAliasNormalizer,
+  decomposeShiftedPeriodRange,
+  shiftPeriod,
   textAt,
   trailingPeriod,
   trailingRange,
@@ -66,6 +73,88 @@ const months = [
   "listopad",
   "prosinec",
 ] as const;
+
+const czechCountWords = [
+  ["dva", "dvě", "dvou", "dvěma"],
+  ["tři", "tří", "třemi"],
+  ["čtyři", "čtyř", "čtyřmi"],
+  ["pět", "pěti"],
+  ["šest", "šesti"],
+  ["sedm", "sedmi"],
+  ["osm", "osmi"],
+  ["devět", "devíti"],
+  ["deset", "deseti"],
+  ["jedenáct", "jedenácti"],
+  ["dvanáct", "dvanácti"],
+  ["třináct", "třinácti"],
+  ["čtrnáct", "čtrnácti"],
+  ["patnáct", "patnácti"],
+  ["šestnáct", "šestnácti"],
+  ["sedmnáct", "sedmnácti"],
+  ["osmnáct", "osmnácti"],
+  ["devatenáct", "devatenácti"],
+  ["dvacet", "dvaceti"],
+] as const;
+const czechCountOnes = [
+  [1, "jedna"],
+  [2, "dva"],
+  [3, "tři"],
+  [4, "čtyři"],
+  [5, "pět"],
+  [6, "šest"],
+  [7, "sedm"],
+  [8, "osm"],
+  [9, "devět"],
+] as const;
+const czechObliqueCountOnes = [
+  [1, "jedním"],
+  [2, "dvěma"],
+  [3, "třemi"],
+  [4, "čtyřmi"],
+  [5, "pěti"],
+  [6, "šesti"],
+  [7, "sedmi"],
+  [8, "osmi"],
+  [9, "devíti"],
+] as const;
+const czechCountAliases = [
+  ...sequentialCountAliases([["jeden", "jedna", "jedno", "jedním", "jednou"]], 1),
+  ...sequentialCountAliases(czechCountWords, 2),
+  ...compoundCountAliases(
+    decimalTens([
+      "dvacet",
+      "třicet",
+      "čtyřicet",
+      "padesát",
+      "šedesát",
+      "sedmdesát",
+      "osmdesát",
+      "devadesát",
+    ]),
+    czechCountOnes,
+    (ten, one) => [`${ten} ${one}`],
+  ),
+  ...compoundCountAliases(
+    decimalTens([
+      "dvaceti",
+      "třiceti",
+      "čtyřiceti",
+      "padesáti",
+      "šedesáti",
+      "sedmdesáti",
+      "osmdesáti",
+      "devadesáti",
+    ]),
+    czechObliqueCountOnes,
+    (ten, one) => [`${ten} ${one}`],
+  ),
+];
+const normalizeCzechCounts = compileCountAliasNormalizer(czechCountAliases);
+const czechCountVocabulary = new Set(countAliasVocabulary(czechCountAliases));
+const correctCzech = (input: string, vocabulary: ReadonlyArray<string>) =>
+  correctWhitespaceSeparatedText(input, vocabulary, czechCountVocabulary);
+const normalizeCzech = (input: string, locale: string) =>
+  normalizeCzechCounts(normalizeNaturalText(input, locale));
 
 const monthGenitives = [
   "ledna",
@@ -467,7 +556,26 @@ const parseBasePeriod = (input: string) => {
   return Option.none<Period>();
 };
 
-const parsePeriod = (input: string) => {
+// RETURN TYPE: Recursive period offsets require an explicit result type.
+const parsePeriod = (input: string): Option.Option<Period> => {
+  const shifted = EffectString.match(
+    /^(.+) (před|za) ([1-9]\d*) (den|dny|dnů|dnem|týden|týdny|týdnů|týdnem|měsíc|měsíce|měsíců|měsícem|měsíci|čtvrtletí|čtvrtletím|čtvrtletími|rok|roky|let|rokem|lety)$/u,
+  )(input);
+  if (Option.isSome(shifted)) {
+    const amount = parseTrailingCount(textAt(shifted.value, 3));
+    const alias = unitAliases.find((unit) => unit[0] === textAt(shifted.value, 4));
+    const entry = alias === undefined ? undefined : units.find((unit) => unit.unit === alias[1]);
+    const period = parsePeriod(textAt(shifted.value, 1));
+    if (Option.isSome(amount) && entry !== undefined && Option.isSome(period)) {
+      const past = textAt(shifted.value, 2) === "před";
+      const direction = past ? -amount.value : amount.value;
+      const pastNoun = amount.value === 1 ? entry.pastSingular : entry.pastPlural;
+      const noun = past ? pastNoun : countNoun(amount.value, entry);
+      const canonical = `${period.value.canonical} ${past ? "před" : "za"} ${amount.value} ${noun}`;
+      return Option.some(shiftPeriod(period.value, direction, entry.unit, canonical));
+    }
+  }
+
   const edge = EffectString.match(/^(začátek|počátek|konec) (.+)$/u)(input);
   if (Option.isSome(edge)) {
     const period = parseBasePeriod(textAt(edge.value, 2));
@@ -734,7 +842,21 @@ const suggestCzech = (input: string, limit: number) => {
   );
 };
 
-const renderCzech = (range: DateRangeExpr) => {
+// RETURN TYPE: Recursive shifted-period rendering requires an explicit result type.
+const renderCzech = (range: DateRangeExpr): Option.Option<string> => {
+  const shifted = decomposeShiftedPeriodRange(range);
+  if (Option.isSome(shifted)) {
+    const base = renderCzech(shifted.value.baseRange);
+    const entry = units.find((unit) => unit.unit === shifted.value.unit);
+    if (Option.isSome(base) && entry !== undefined) {
+      const amount = Math.abs(shifted.value.amount);
+      const pastNoun = amount === 1 ? entry.pastSingular : entry.pastPlural;
+      const noun = shifted.value.amount < 0 ? pastNoun : countNoun(amount, entry);
+      const direction = shifted.value.amount < 0 ? "před" : "za";
+      return Option.some(`${base.value} ${direction} ${amount} ${noun}`);
+    }
+  }
+
   const offset = calendarPeriodOffset(range);
   if (Option.isSome(offset) && Math.abs(offset.value.amount) > 1) {
     const entry = units.find((unit) => unit.unit === offset.value.unit);
@@ -830,8 +952,8 @@ export const CzechContribution = new BaseLanguageContribution({
     "začátek",
     "zbytek",
   ],
-  normalize: normalizeNaturalText,
-  correct: correctWhitespaceSeparatedText,
+  normalize: normalizeCzech,
+  correct: correctCzech,
   parseExact: parseCzech,
   suggest: suggestCzech,
   render: renderCzech,

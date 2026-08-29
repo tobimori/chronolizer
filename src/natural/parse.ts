@@ -75,7 +75,8 @@ export const parseNatural = Effect.fn("chronolizer.parseNatural")(function* (
 
   const corrected = language.correct?.(normalized, language.vocabulary) ?? [];
   const parsedCorrections = EffectArray.filterMap(corrected, (correction) => {
-    const candidates = applyFuturePolicy(language.parseExact(correction.text), options.allowFuture);
+    const correctedText = language.normalize(correction.text, language.locale);
+    const candidates = applyFuturePolicy(language.parseExact(correctedText), options.allowFuture);
     return EffectArray.isReadonlyArrayNonEmpty(candidates)
       ? Result.succeed({ correction, candidates })
       : Result.failVoid;

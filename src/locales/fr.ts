@@ -16,6 +16,8 @@ import {
   absoluteDatePeriod,
   calendarPeriodOffset,
   candidate,
+  sequentialCountAliases,
+  countAliasVocabulary,
   currentYearDatePeriods,
   datedPeriods,
   datedQuarterPeriods,
@@ -46,13 +48,16 @@ import {
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
+  compileCountAliasNormalizer,
+  decomposeShiftedPeriodRange,
+  shiftPeriod,
   textAt,
   trailingPeriod,
   trailingRange,
   untilNowRange,
   validYear,
 } from "./shared.ts";
-import type { Period } from "./shared.ts";
+import type { CountAlias, Period } from "./shared.ts";
 
 const months = [
   "janvier",
@@ -68,6 +73,80 @@ const months = [
   "novembre",
   "décembre",
 ] as const;
+
+const frenchCountWords = [
+  ["deux"],
+  ["trois"],
+  ["quatre"],
+  ["cinq"],
+  ["six"],
+  ["sept"],
+  ["huit"],
+  ["neuf"],
+  ["dix"],
+  ["onze"],
+  ["douze"],
+  ["treize"],
+  ["quatorze"],
+  ["quinze"],
+  ["seize"],
+  ["dix-sept"],
+  ["dix-huit"],
+  ["dix-neuf"],
+  ["vingt"],
+] as const;
+const frenchCompoundCountAliases = () => {
+  const words = [
+    "",
+    "un",
+    "deux",
+    "trois",
+    "quatre",
+    "cinq",
+    "six",
+    "sept",
+    "huit",
+    "neuf",
+    "dix",
+    "onze",
+    "douze",
+    "treize",
+    "quatorze",
+    "quinze",
+    "seize",
+    "dix-sept",
+    "dix-huit",
+    "dix-neuf",
+  ] as const;
+  const aliases: Array<CountAlias> = [];
+  for (let amount = 21; amount <= 99; amount += 1) {
+    const tens = Math.floor(amount / 10);
+    const remainder = amount % 10;
+    let phrase = "";
+    if (tens <= 6) {
+      const tensWord = ["", "", "vingt", "trente", "quarante", "cinquante", "soixante"][tens];
+      if (tensWord === undefined) continue;
+      phrase = remainder === 1 ? `${tensWord} et un` : `${tensWord}-${words[remainder] ?? ""}`;
+    } else if (tens === 7) {
+      phrase = remainder === 1 ? "soixante et onze" : `soixante-${words[10 + remainder] ?? ""}`;
+    } else if (tens === 8) {
+      phrase = remainder === 0 ? "quatre-vingts" : `quatre-vingt-${words[remainder] ?? ""}`;
+    } else {
+      phrase = `quatre-vingt-${words[10 + remainder] ?? ""}`;
+    }
+    aliases.push([phrase, amount], [phrase.replaceAll("-", " "), amount]);
+    if (amount % 10 === 1) aliases.push([phrase.replace(/un$/u, "une"), amount]);
+  }
+  return aliases;
+};
+const frenchCountAliases = [
+  ...sequentialCountAliases(frenchCountWords, 2),
+  ...frenchCompoundCountAliases(),
+];
+const normalizeFrenchCounts = compileCountAliasNormalizer(frenchCountAliases);
+const frenchCountVocabulary = new Set(countAliasVocabulary(frenchCountAliases));
+const correctFrench = (input: string, vocabulary: ReadonlyArray<string>) =>
+  correctWhitespaceSeparatedText(input, vocabulary, frenchCountVocabulary);
 
 const monthAbbreviations = [
   ["jan", "janv"],
@@ -491,7 +570,25 @@ const parseBasePeriod = (input: string) => {
   return Option.none<Period>();
 };
 
-const parsePeriod = (input: string) => {
+// RETURN TYPE: Recursive period offsets require an explicit result type.
+const parsePeriod = (input: string): Option.Option<Period> => {
+  const shifted = EffectString.match(
+    /^(.+) (il y a|dans) ([1-9]\d*) (jour|jours|semaine|semaines|mois|trimestre|trimestres|an|ans|année|annee|années|annees)$/u,
+  )(input);
+  if (Option.isSome(shifted)) {
+    const amount = parseTrailingCount(textAt(shifted.value, 3));
+    const alias = unitAliases.find((unit) => unit[0] === textAt(shifted.value, 4));
+    const entry = alias === undefined ? undefined : units.find((unit) => unit.unit === alias[1]);
+    const period = parsePeriod(textAt(shifted.value, 1));
+    if (Option.isSome(amount) && entry !== undefined && Option.isSome(period)) {
+      const past = textAt(shifted.value, 2) === "il y a";
+      const direction = past ? -amount.value : amount.value;
+      const noun = amount.value === 1 ? entry.singular : entry.plural;
+      const canonical = `${period.value.canonical} ${past ? "il y a" : "dans"} ${amount.value} ${noun}`;
+      return Option.some(shiftPeriod(period.value, direction, entry.unit, canonical));
+    }
+  }
+
   const edge = EffectString.match(
     /^(?:le |la |l')?(début|debut|commencement|fin)(?: du | de la | de l'| de )(.+)$/u,
   )(input);
@@ -863,7 +960,20 @@ const suggestFrench = (input: string, limit: number) => {
   );
 };
 
-const renderFrench = (range: DateRangeExpr) => {
+// RETURN TYPE: Recursive shifted-period rendering requires an explicit result type.
+const renderFrench = (range: DateRangeExpr): Option.Option<string> => {
+  const shifted = decomposeShiftedPeriodRange(range);
+  if (Option.isSome(shifted)) {
+    const base = renderFrench(shifted.value.baseRange);
+    const entry = units.find((unit) => unit.unit === shifted.value.unit);
+    if (Option.isSome(base) && entry !== undefined) {
+      const amount = Math.abs(shifted.value.amount);
+      const noun = amount === 1 ? entry.singular : entry.plural;
+      const direction = shifted.value.amount < 0 ? "il y a" : "dans";
+      return Option.some(`${base.value} ${direction} ${amount} ${noun}`);
+    }
+  }
+
   const offset = calendarPeriodOffset(range);
   if (Option.isSome(offset) && Math.abs(offset.value.amount) > 1) {
     const entry = units.find((unit) => unit.unit === offset.value.unit);
@@ -925,7 +1035,7 @@ const renderFrench = (range: DateRangeExpr) => {
 };
 
 const normalizeFrench = (input: string, locale: string) =>
-  normalizeNaturalText(input, locale).replaceAll("’", "'");
+  normalizeFrenchCounts(normalizeNaturalText(input, locale).replaceAll("’", "'"));
 
 export const FrenchContribution = new BaseLanguageContribution({
   locale: "fr",
@@ -961,7 +1071,7 @@ export const FrenchContribution = new BaseLanguageContribution({
     "jusqu'à",
   ],
   normalize: normalizeFrench,
-  correct: correctWhitespaceSeparatedText,
+  correct: correctFrench,
   parseExact: parseFrench,
   suggest: suggestFrench,
   render: renderFrench,

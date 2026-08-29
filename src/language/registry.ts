@@ -44,6 +44,11 @@ interface RegisteredExtension {
   readonly contribution: LanguageExtensionContribution;
 }
 
+interface RegistryState {
+  readonly entries: ReadonlyArray<RegisteredContribution>;
+  readonly compiledLanguages: ReadonlyMap<string, CompiledLanguage>;
+}
+
 export namespace LanguageRegistry {
   export interface Service {
     readonly register: (
@@ -139,7 +144,7 @@ const compileLanguage = (locale: string, registered: ReadonlyArray<RegisteredCon
 };
 
 const createRegistry = Effect.fn(function* () {
-  const entries = yield* Ref.make<ReadonlyArray<RegisteredContribution>>([]);
+  const state = yield* Ref.make<RegistryState>({ entries: [], compiledLanguages: new Map() });
 
   const register: LanguageRegistry.Service["register"] = Effect.fn(function* (
     pluginId: string,
@@ -155,13 +160,10 @@ const createRegistry = Effect.fn(function* () {
 
     const token = Symbol(pluginId);
     yield* Effect.acquireRelease(
-      Ref.modify<
-        ReadonlyArray<RegisteredContribution>,
-        Result.Result<symbol, LanguageConflictError>
-      >(entries, (current) => {
+      Ref.modify<RegistryState, Result.Result<symbol, LanguageConflictError>>(state, (current) => {
         const conflictingBase = Match.valueTags(contribution, {
           BaseLanguage: (base) =>
-            EffectArray.findFirst(current, (entry) =>
+            EffectArray.findFirst(current.entries, (entry) =>
               Match.valueTags(entry.contribution, {
                 BaseLanguage: (registeredBase) => registeredBase.locale === base.locale,
                 LanguageExtension: () => false,
@@ -173,7 +175,10 @@ const createRegistry = Effect.fn(function* () {
           onNone: () =>
             [
               Result.succeed(token),
-              EffectArray.append(current, { token, pluginId, contribution }),
+              {
+                entries: EffectArray.append(current.entries, { token, pluginId, contribution }),
+                compiledLanguages: new Map(),
+              },
             ] as const,
           onSome: (conflict) =>
             [
@@ -190,16 +195,26 @@ const createRegistry = Effect.fn(function* () {
         });
       }).pipe(Effect.flatMap((result) => Effect.fromResult(result))),
       (registeredToken) =>
-        Ref.update(entries, (items) =>
-          EffectArray.filter(items, (entry) => entry.token !== registeredToken),
-        ),
+        Ref.update(state, (current) => ({
+          entries: EffectArray.filter(current.entries, (entry) => entry.token !== registeredToken),
+          compiledLanguages: new Map(),
+        })),
     );
   });
 
   const resolve: LanguageRegistry.Service["resolve"] = Effect.fn(function* (locale: string) {
     const canonical = canonicalBaseLocale(locale);
     if (Option.isSome(canonical)) {
-      const compiled = compileLanguage(canonical.value, yield* Ref.get(entries));
+      const compiled = yield* Ref.modify(state, (current) => {
+        const cached = current.compiledLanguages.get(canonical.value);
+        if (cached !== undefined) return [Option.some(cached), current] as const;
+
+        const language = compileLanguage(canonical.value, current.entries);
+        if (Option.isNone(language)) return [language, current] as const;
+        const cache = new Map(current.compiledLanguages);
+        cache.set(canonical.value, language.value);
+        return [language, { entries: current.entries, compiledLanguages: cache }] as const;
+      });
       if (Option.isSome(compiled)) return compiled.value;
     }
     return yield* new UnsupportedLocaleError({ locale });

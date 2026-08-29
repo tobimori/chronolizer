@@ -15,7 +15,11 @@ import {
   absoluteDatePeriod,
   calendarPeriodOffset,
   candidate,
+  compoundCountAliases,
+  sequentialCountAliases,
+  countAliasVocabulary,
   currentYearDatePeriods,
+  decimalTens,
   datedPeriods,
   datedQuarterPeriods,
   fixedMonthPeriod,
@@ -42,6 +46,9 @@ import {
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
+  compileCountAliasNormalizer,
+  decomposeShiftedPeriodRange,
+  shiftPeriod,
   textAt,
   trailingPeriod,
   trailingRange,
@@ -81,6 +88,49 @@ const monthAbbreviations = [
 ] as const;
 
 const quarterNames = ["first", "second", "third", "fourth"] as const;
+
+const englishCountWords = [
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "eleven",
+  "twelve",
+  "thirteen",
+  "fourteen",
+  "fifteen",
+  "sixteen",
+  "seventeen",
+  "eighteen",
+  "nineteen",
+  "twenty",
+] as const;
+const englishCountOnes = englishCountWords
+  .slice(0, 9)
+  .map((word, index) => [index + 1, word] as const);
+const englishCountAliases = [
+  ...sequentialCountAliases(
+    englishCountWords.map((word) => [word]),
+    1,
+  ),
+  ...compoundCountAliases(
+    decimalTens(["twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]),
+    englishCountOnes,
+    (ten, one) => [`${ten} ${one}`, `${ten}-${one}`],
+  ),
+];
+const normalizeEnglishCounts = compileCountAliasNormalizer(englishCountAliases);
+const englishCountVocabulary = new Set(countAliasVocabulary(englishCountAliases));
+const correctEnglish = (input: string, vocabulary: ReadonlyArray<string>) =>
+  correctWhitespaceSeparatedText(input, vocabulary, englishCountVocabulary);
+const normalizeEnglish = (input: string, locale: string) =>
+  normalizeEnglishCounts(normalizeNaturalText(input, locale));
 
 const units = [
   ["day", "day", "days"],
@@ -354,7 +404,44 @@ const parseBasePeriod = (input: string) => {
   return Option.none<Period>();
 };
 
-const parsePeriod = (input: string) => {
+// RETURN TYPE: Recursive period offsets require an explicit result type.
+const parsePeriod = (input: string): Option.Option<Period> => {
+  const shifted = EffectString.match(
+    /^(.+) ([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years) (ago|prior|from now)$/u,
+  )(input);
+  if (Option.isSome(shifted)) {
+    const amount = parseTrailingCount(textAt(shifted.value, 2));
+    const unitText = textAt(shifted.value, 3);
+    const period = parsePeriod(textAt(shifted.value, 1));
+    if (Option.isSome(amount) && Option.isSome(period)) {
+      const entry = countedUnit(unitText, amount.value);
+      if (entry !== undefined) {
+        const past = textAt(shifted.value, 4) !== "from now";
+        const direction = past ? -amount.value : amount.value;
+        const suffix = past ? "ago" : "from now";
+        const canonical = `${period.value.canonical} ${amount.value} ${unitText} ${suffix}`;
+        return Option.some(shiftPeriod(period.value, direction, entry[1], canonical));
+      }
+    }
+  }
+
+  const relativeShift = EffectString.match(
+    /^([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years) (before|after) (.+)$/u,
+  )(input);
+  if (Option.isSome(relativeShift)) {
+    const amount = parseTrailingCount(textAt(relativeShift.value, 1));
+    const unitText = textAt(relativeShift.value, 2);
+    const period = parsePeriod(textAt(relativeShift.value, 4));
+    if (Option.isSome(amount) && Option.isSome(period)) {
+      const entry = countedUnit(unitText, amount.value);
+      if (entry !== undefined) {
+        const direction =
+          textAt(relativeShift.value, 3) === "before" ? -amount.value : amount.value;
+        return Option.some(shiftPeriod(period.value, direction, entry[1], input));
+      }
+    }
+  }
+
   const previousDay = EffectString.match(/^(?:the )?day before (.+)$/u)(input);
   if (Option.isSome(previousDay)) {
     const period = parseBasePeriod(textAt(previousDay.value, 1));
@@ -684,7 +771,20 @@ const suggestEnglish = (input: string, limit: number) => {
   );
 };
 
-const renderEnglish = (range: DateRangeExpr) => {
+// RETURN TYPE: Recursive shifted-period rendering requires an explicit result type.
+const renderEnglish = (range: DateRangeExpr): Option.Option<string> => {
+  const shifted = decomposeShiftedPeriodRange(range);
+  if (Option.isSome(shifted)) {
+    const base = renderEnglish(shifted.value.baseRange);
+    const entry = units.find((unit) => unit[1] === shifted.value.unit);
+    if (Option.isSome(base) && entry !== undefined) {
+      const amount = Math.abs(shifted.value.amount);
+      const noun = amount === 1 ? entry[0] : entry[2];
+      const suffix = shifted.value.amount < 0 ? "ago" : "from now";
+      return Option.some(`${base.value} ${amount} ${noun} ${suffix}`);
+    }
+  }
+
   const offset = calendarPeriodOffset(range);
   if (Option.isSome(offset) && Math.abs(offset.value.amount) > 1) {
     const entry = units.find((unit) => unit[1] === offset.value.unit);
@@ -806,8 +906,8 @@ export const EnglishContribution = new BaseLanguageContribution({
     "weekend",
     "yesterday",
   ],
-  normalize: normalizeNaturalText,
-  correct: correctWhitespaceSeparatedText,
+  normalize: normalizeEnglish,
+  correct: correctEnglish,
   parseExact: parseEnglish,
   suggest: suggestEnglish,
   render: renderEnglish,

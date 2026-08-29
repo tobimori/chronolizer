@@ -16,7 +16,11 @@ import {
   absoluteDatePeriod,
   calendarPeriodOffset,
   candidate,
+  compoundCountAliases,
+  sequentialCountAliases,
+  countAliasVocabulary,
   currentYearDatePeriods,
+  decimalTens,
   datedPeriods,
   datedQuarterPeriods,
   fixedDatePeriod,
@@ -46,6 +50,9 @@ import {
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
+  compileCountAliasNormalizer,
+  decomposeShiftedPeriodRange,
+  shiftPeriod,
   textAt,
   trailingPeriod,
   trailingRange,
@@ -68,6 +75,70 @@ const months = [
   "noviembre",
   "diciembre",
 ] as const;
+
+const spanishCountWords = [
+  ["dos"],
+  ["tres"],
+  ["cuatro"],
+  ["cinco"],
+  ["seis"],
+  ["siete"],
+  ["ocho"],
+  ["nueve"],
+  ["diez"],
+  ["once"],
+  ["doce"],
+  ["trece"],
+  ["catorce"],
+  ["quince"],
+  ["dieciséis", "dieciseis"],
+  ["diecisiete"],
+  ["dieciocho"],
+  ["diecinueve"],
+  ["veinte"],
+] as const;
+const spanishCountOnes = [
+  [1, "uno"],
+  [2, "dos"],
+  [3, "tres"],
+  [4, "cuatro"],
+  [5, "cinco"],
+  [6, "seis"],
+  [7, "siete"],
+  [8, "ocho"],
+  [9, "nueve"],
+] as const;
+const spanishCountAliases = [
+  ...sequentialCountAliases(spanishCountWords, 2),
+  ...compoundCountAliases(
+    decimalTens([
+      "veinte",
+      "treinta",
+      "cuarenta",
+      "cincuenta",
+      "sesenta",
+      "setenta",
+      "ochenta",
+      "noventa",
+    ]),
+    spanishCountOnes,
+    (ten, one, amount) => {
+      if (amount === 21) return ["veintiuno", "veintiún", "veintiun", "veintiuna"];
+      if (amount === 22) return ["veintidós", "veintidos"];
+      if (amount === 23) return ["veintitrés", "veintitres"];
+      if (amount === 26) return ["veintiséis", "veintiseis"];
+      if (amount < 30) return [`veinti${one}`];
+      const variants = one === "uno" ? [one, "un", "una"] : [one];
+      return variants.map((variant) => `${ten} y ${variant}`);
+    },
+  ),
+];
+const normalizeSpanishCounts = compileCountAliasNormalizer(spanishCountAliases);
+const spanishCountVocabulary = new Set(countAliasVocabulary(spanishCountAliases));
+const correctSpanish = (input: string, vocabulary: ReadonlyArray<string>) =>
+  correctWhitespaceSeparatedText(input, vocabulary, spanishCountVocabulary);
+const normalizeSpanish = (input: string, locale: string) =>
+  normalizeSpanishCounts(normalizeNaturalText(input, locale));
 
 const monthAbbreviations = [
   ["ene"],
@@ -450,7 +521,25 @@ const parseBasePeriod = (input: string) => {
   return Option.none<Period>();
 };
 
-const parsePeriod = (input: string) => {
+// RETURN TYPE: Recursive period offsets require an explicit result type.
+const parsePeriod = (input: string): Option.Option<Period> => {
+  const shifted = EffectString.match(
+    /^(.+) (hace|dentro de|en) ([1-9]\d*) (día|dia|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
+  )(input);
+  if (Option.isSome(shifted)) {
+    const amount = parseTrailingCount(textAt(shifted.value, 3));
+    const alias = unitAliases.find((unit) => unit[0] === textAt(shifted.value, 4));
+    const entry = alias === undefined ? undefined : units.find((unit) => unit.unit === alias[1]);
+    const period = parsePeriod(textAt(shifted.value, 1));
+    if (Option.isSome(amount) && entry !== undefined && Option.isSome(period)) {
+      const past = textAt(shifted.value, 2) === "hace";
+      const direction = past ? -amount.value : amount.value;
+      const noun = amount.value === 1 ? entry.singular : entry.plural;
+      const canonical = `${period.value.canonical} ${past ? "hace" : "dentro de"} ${amount.value} ${noun}`;
+      return Option.some(shiftPeriod(period.value, direction, entry.unit, canonical));
+    }
+  }
+
   const edge = EffectString.match(
     /^(?:el )?(inicio|comienzo|principio|fin|final)(?: de| del) (.+)$/u,
   )(input);
@@ -842,7 +931,20 @@ const suggestSpanish = (input: string, limit: number) => {
   );
 };
 
-const renderSpanish = (range: DateRangeExpr) => {
+// RETURN TYPE: Recursive shifted-period rendering requires an explicit result type.
+const renderSpanish = (range: DateRangeExpr): Option.Option<string> => {
+  const shifted = decomposeShiftedPeriodRange(range);
+  if (Option.isSome(shifted)) {
+    const base = renderSpanish(shifted.value.baseRange);
+    const entry = units.find((unit) => unit.unit === shifted.value.unit);
+    if (Option.isSome(base) && entry !== undefined) {
+      const amount = Math.abs(shifted.value.amount);
+      const noun = amount === 1 ? entry.singular : entry.plural;
+      const direction = shifted.value.amount < 0 ? "hace" : "dentro de";
+      return Option.some(`${base.value} ${direction} ${amount} ${noun}`);
+    }
+  }
+
   const offset = calendarPeriodOffset(range);
   if (Option.isSome(offset) && Math.abs(offset.value.amount) > 1) {
     const entry = units.find((unit) => unit.unit === offset.value.unit);
@@ -932,8 +1034,8 @@ export const SpanishContribution = new BaseLanguageContribution({
     "resto",
     "últimos",
   ],
-  normalize: normalizeNaturalText,
-  correct: correctWhitespaceSeparatedText,
+  normalize: normalizeSpanish,
+  correct: correctSpanish,
   parseExact: parseSpanish,
   suggest: suggestSpanish,
   render: renderSpanish,

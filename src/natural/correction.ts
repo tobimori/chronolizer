@@ -44,25 +44,64 @@ export const damerauLevenshteinDistance = (left: string, right: string) => {
   return previous[right.length] ?? fallback;
 };
 
-const replacementsFor = (word: string, vocabulary: ReadonlyArray<string>) => {
+const segmentedReplacements = (word: string, vocabulary: ReadonlySet<string>) => {
+  const segmentations: Array<Array<ReadonlyArray<string>>> = Array.from(
+    { length: word.length + 1 },
+    () => [],
+  );
+  const initial = segmentations[0];
+  if (initial !== undefined) initial.push([]);
+
+  for (let start = 0; start < word.length; start += 1) {
+    const prefixes = segmentations[start] ?? [];
+    if (prefixes.length === 0) continue;
+    for (let end = start + 1; end <= word.length; end += 1) {
+      const part = word.slice(start, end);
+      if (!vocabulary.has(part)) continue;
+      const target = segmentations[end];
+      if (target === undefined) continue;
+      for (const prefix of prefixes) {
+        if (target.length >= 4) break;
+        target.push([...prefix, part]);
+      }
+    }
+  }
+
+  return (segmentations[word.length] ?? [])
+    .filter((parts) => parts.length > 1)
+    .map((parts) => ({ word: parts.join(" "), distance: parts.length - 1 }));
+};
+
+const replacementsFor = (
+  word: string,
+  vocabulary: ReadonlyArray<string>,
+  segmentationVocabulary: ReadonlySet<string>,
+) => {
   if (vocabulary.includes(word) || isProtectedValue(word)) return [{ word, distance: 0 }];
-  if (word.length <= 3) return [];
+
+  const segmented = segmentedReplacements(word, segmentationVocabulary);
+  if (word.length <= 3) return segmented;
+
   const maximum = word.length >= 6 ? 2 : 1;
-  const matches = vocabulary
+  const fuzzy = vocabulary
     .filter((candidate) => Math.abs(candidate.length - word.length) <= maximum)
     .map((candidate) => ({
       word: candidate,
       distance: damerauLevenshteinDistance(word, candidate),
     }))
     .filter((candidate) => candidate.distance <= maximum);
+  const matches = [...segmented, ...fuzzy];
   if (matches.length === 0) return [];
   const minimum = Math.min(...matches.map((candidate) => candidate.distance));
   return matches.filter((candidate) => candidate.distance === minimum).slice(0, 4);
 };
 
+const emptySegmentationVocabulary: ReadonlySet<string> = new Set();
+
 export const correctWhitespaceSeparatedText = (
   input: string,
   vocabulary: ReadonlyArray<string>,
+  segmentationVocabulary: ReadonlySet<string> = emptySegmentationVocabulary,
 ) => {
   const words = naturalWords(input);
   let partials: ReadonlyArray<PartialCorrection> = [
@@ -70,7 +109,7 @@ export const correctWhitespaceSeparatedText = (
   ];
 
   for (const word of words) {
-    const replacements = replacementsFor(word, vocabulary);
+    const replacements = replacementsFor(word, vocabulary, segmentationVocabulary);
     if (replacements.length === 0) return [];
     const next: Array<PartialCorrection> = [];
     for (const partial of partials) {

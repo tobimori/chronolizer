@@ -16,7 +16,11 @@ import {
   absoluteDatePeriod,
   calendarPeriodOffset,
   candidate,
+  compoundCountAliases,
+  sequentialCountAliases,
+  countAliasVocabulary,
   currentYearDatePeriods,
+  decimalTens,
   datedPeriods,
   datedQuarterPeriods,
   fixedDatePeriod,
@@ -45,6 +49,9 @@ import {
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
+  compileCountAliasNormalizer,
+  decomposeShiftedPeriodRange,
+  shiftPeriod,
   textAt,
   trailingPeriod,
   trailingRange,
@@ -67,6 +74,61 @@ const months = [
   "november",
   "december",
 ] as const;
+
+const dutchCountWords = [
+  "twee",
+  "drie",
+  "vier",
+  "vijf",
+  "zes",
+  "zeven",
+  "acht",
+  "negen",
+  "tien",
+  "elf",
+  "twaalf",
+  "dertien",
+  "veertien",
+  "vijftien",
+  "zestien",
+  "zeventien",
+  "achttien",
+  "negentien",
+  "twintig",
+] as const;
+const dutchCountOnes = [
+  [1, "een"],
+  ...dutchCountWords.slice(0, 8).map((word, index) => [index + 2, word] as const),
+] as const;
+const dutchCountAliases = [
+  ...sequentialCountAliases(
+    dutchCountWords.map((word) => [word]),
+    2,
+  ),
+  ...compoundCountAliases(
+    decimalTens([
+      "twintig",
+      "dertig",
+      "veertig",
+      "vijftig",
+      "zestig",
+      "zeventig",
+      "tachtig",
+      "negentig",
+    ]),
+    dutchCountOnes,
+    (ten, one) => {
+      const prefix = one === "twee" || one === "drie" ? `${one}ën` : `${one}en`;
+      return [`${prefix}${ten}`];
+    },
+  ),
+];
+const normalizeDutchCounts = compileCountAliasNormalizer(dutchCountAliases);
+const dutchCountVocabulary = new Set(countAliasVocabulary(dutchCountAliases));
+const correctDutch = (input: string, vocabulary: ReadonlyArray<string>) =>
+  correctWhitespaceSeparatedText(input, vocabulary, dutchCountVocabulary);
+const normalizeDutch = (input: string, locale: string) =>
+  normalizeDutchCounts(normalizeNaturalText(input, locale));
 
 const monthAbbreviations = [
   ["jan"],
@@ -418,7 +480,29 @@ const parseBasePeriod = (input: string) => {
   return Option.none<Period>();
 };
 
-const parsePeriod = (input: string) => {
+// RETURN TYPE: Recursive period offsets require an explicit result type.
+const parsePeriod = (input: string): Option.Option<Period> => {
+  const shifted = EffectString.match(
+    /^(.+) (?:(?:over|binnen) ([1-9]\d*) (dag|dagen|week|weken|maand|maanden|kwartaal|kwartalen|jaar|jaren)|([1-9]\d*) (dag|dagen|week|weken|maand|maanden|kwartaal|kwartalen|jaar|jaren) (geleden|later))$/u,
+  )(input);
+  if (Option.isSome(shifted)) {
+    const suffixAmount = textAt(shifted.value, 4);
+    const amount = parseTrailingCount(suffixAmount || textAt(shifted.value, 2));
+    const unitText = textAt(shifted.value, suffixAmount.length > 0 ? 5 : 3);
+    const alias = unitAliases.find((unit) => unit[0] === unitText);
+    const entry = alias === undefined ? undefined : units.find((unit) => unit.unit === alias[1]);
+    const period = parsePeriod(textAt(shifted.value, 1));
+    if (Option.isSome(amount) && entry !== undefined && Option.isSome(period)) {
+      const past = textAt(shifted.value, 6) === "geleden";
+      const direction = past ? -amount.value : amount.value;
+      const noun = amount.value === 1 ? entry.singular : entry.plural;
+      const canonical = past
+        ? `${period.value.canonical} ${amount.value} ${noun} geleden`
+        : `${period.value.canonical} over ${amount.value} ${noun}`;
+      return Option.some(shiftPeriod(period.value, direction, entry.unit, canonical));
+    }
+  }
+
   const edge = EffectString.match(/^(?:het )?(begin|eind|einde)(?: van)? (.+)$/u)(input);
   if (Option.isSome(edge)) {
     const edgeName = textAt(edge.value, 1);
@@ -720,7 +804,23 @@ const suggestDutch = (input: string, limit: number) => {
   );
 };
 
-const renderDutch = (range: DateRangeExpr) => {
+// RETURN TYPE: Recursive shifted-period rendering requires an explicit result type.
+const renderDutch = (range: DateRangeExpr): Option.Option<string> => {
+  const shifted = decomposeShiftedPeriodRange(range);
+  if (Option.isSome(shifted)) {
+    const base = renderDutch(shifted.value.baseRange);
+    const entry = units.find((unit) => unit.unit === shifted.value.unit);
+    if (Option.isSome(base) && entry !== undefined) {
+      const amount = Math.abs(shifted.value.amount);
+      const noun = amount === 1 ? entry.singular : entry.plural;
+      return Option.some(
+        shifted.value.amount < 0
+          ? `${base.value} ${amount} ${noun} geleden`
+          : `${base.value} over ${amount} ${noun}`,
+      );
+    }
+  }
+
   const offset = calendarPeriodOffset(range);
   if (Option.isSome(offset) && Math.abs(offset.value.amount) > 1) {
     const entry = units.find((unit) => unit.unit === offset.value.unit);
@@ -817,8 +917,8 @@ export const DutchContribution = new BaseLanguageContribution({
     "volgend",
     "voor",
   ],
-  normalize: normalizeNaturalText,
-  correct: correctWhitespaceSeparatedText,
+  normalize: normalizeDutch,
+  correct: correctDutch,
   parseExact: parseDutch,
   suggest: suggestDutch,
   render: renderDutch,

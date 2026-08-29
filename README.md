@@ -187,7 +187,8 @@ You can parse:
 - fixed months, quarters, years, and date ranges;
 - named days with or without a year, such as `January 12` and `12th of January`;
 - ranges without one end, such as `since January 2025` and `from January 12`;
-- combined phrases, such as `the day before January 12`;
+- written counts from one through ninety-nine, such as `two weeks ago` and `twenty-one weeks ago`;
+- combined phrases, such as `the day before January 12` and `yesterday two weeks ago`;
 - period starts, period ends, and weekends;
 - abbreviated month names and common equivalent phrases.
 

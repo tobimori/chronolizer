@@ -75,6 +75,17 @@ const extensionPlugin = (id: string, priority: number, canonical: string, offset
   } satisfies LanguagePlugin;
 };
 
+const cacheExtension = new LanguageExtensionContribution({
+  locale: "en",
+  priority: 0,
+  vocabulary: ["cached-special"],
+  parseExact: (input) => {
+    if (input !== "cached-special") return Option.none();
+    const start = startOf(now(), "day");
+    return Option.some(candidate(completePeriod(start, shift(start, 1, "day")), input));
+  },
+});
+
 const regionalEnglish = new BaseLanguageContribution({
   locale: "en-US",
   vocabulary: ["regional"],
@@ -353,6 +364,27 @@ describe("language registry", () => {
   );
 
   it.effect(
+    "invalidates compiled languages when extensions enter and leave scope",
+    Effect.fn(function* () {
+      const registry = yield* LanguageRegistry;
+      yield* Effect.scoped(
+        Effect.fn(function* () {
+          yield* registry.register("chronolizer/language-en", EnglishContribution);
+          expect((yield* registry.resolve("en")).parseExact("cached-special")).toEqual([]);
+
+          const extended = yield* Effect.scoped(
+            registry
+              .register("example/cache-extension", cacheExtension)
+              .pipe(Effect.andThen(registry.resolve("en"))),
+          );
+          expect(extended.parseExact("cached-special")).toHaveLength(1);
+          expect((yield* registry.resolve("en")).parseExact("cached-special")).toEqual([]);
+        })(),
+      );
+    }, Effect.provide(LanguageRegistryLayer)),
+  );
+
+  it.effect(
     "reports an equal-cost typo tie as ambiguous",
     Effect.fn(
       function* () {
@@ -377,6 +409,7 @@ describe("language registry", () => {
       const candidates = snapshot.parseExact("year to date");
       expect(candidates).toHaveLength(1);
       expect(snapshot.render(completePeriod(now(), now()))).toEqual(Option.none());
+      expect(yield* Effect.flip(registry.resolve("en"))).toBeInstanceOf(UnsupportedLocaleError);
     }, Effect.provide(LanguageRegistryLayer)),
   );
 });

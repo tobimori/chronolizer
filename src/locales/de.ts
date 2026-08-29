@@ -16,7 +16,11 @@ import {
   absoluteDatePeriod,
   calendarPeriodOffset,
   candidate,
+  compoundCountAliases,
+  sequentialCountAliases,
+  countAliasVocabulary,
   currentYearDatePeriods,
+  decimalTens,
   datedPeriods,
   datedQuarterPeriods,
   fixedDatePeriod,
@@ -45,6 +49,9 @@ import {
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
+  compileCountAliasNormalizer,
+  decomposeShiftedPeriodRange,
+  shiftPeriod,
   textAt,
   trailingPeriod,
   trailingRange,
@@ -67,6 +74,58 @@ const months = [
   "november",
   "dezember",
 ] as const;
+
+const germanCountWords = [
+  "zwei",
+  "drei",
+  "vier",
+  "fünf",
+  "sechs",
+  "sieben",
+  "acht",
+  "neun",
+  "zehn",
+  "elf",
+  "zwölf",
+  "dreizehn",
+  "vierzehn",
+  "fünfzehn",
+  "sechzehn",
+  "siebzehn",
+  "achtzehn",
+  "neunzehn",
+  "zwanzig",
+] as const;
+const germanCountOnes = [
+  [1, "ein"],
+  ...germanCountWords.slice(0, 8).map((word, index) => [index + 2, word] as const),
+] as const;
+const germanCountAliases = [
+  ...sequentialCountAliases(
+    germanCountWords.map((word) => [word]),
+    2,
+  ),
+  ...compoundCountAliases(
+    decimalTens([
+      "zwanzig",
+      "dreißig",
+      "vierzig",
+      "fünfzig",
+      "sechzig",
+      "siebzig",
+      "achtzig",
+      "neunzig",
+    ]),
+    germanCountOnes,
+    (ten, one) => [`${one}und${ten}`],
+  ),
+];
+const normalizeGermanCounts = compileCountAliasNormalizer(germanCountAliases);
+const germanCountVocabulary = new Set(countAliasVocabulary(germanCountAliases));
+const correctGerman = (input: string, vocabulary: ReadonlyArray<string>) =>
+  correctWhitespaceSeparatedText(input, vocabulary, germanCountVocabulary);
+const normalizeGerman = (input: string, locale: string) =>
+  normalizeGermanCounts(normalizeNaturalText(input, locale));
 
 const monthAbbreviations = [
   ["jan"],
@@ -512,7 +571,27 @@ const parseBasePeriod = (input: string) => {
   return Option.none<Period>();
 };
 
-const parsePeriod = (input: string) => {
+// RETURN TYPE: Recursive period offsets require an explicit result type.
+const parsePeriod = (input: string): Option.Option<Period> => {
+  const shifted = EffectString.match(
+    /^(.+) (vor|in) ([1-9]\d*) (tag|tagen|woche|wochen|monat|monaten|quartal|quartalen|jahr|jahren)$/u,
+  )(input);
+  if (Option.isSome(shifted)) {
+    const amount = parseTrailingCount(textAt(shifted.value, 3));
+    const unitText = textAt(shifted.value, 4);
+    const entry = unitPhrases.find((unit) =>
+      [unit.noun, unit.plural, unit.dative].includes(unitText),
+    );
+    const period = parsePeriod(textAt(shifted.value, 1));
+    if (Option.isSome(amount) && entry !== undefined && Option.isSome(period)) {
+      const past = textAt(shifted.value, 2) === "vor";
+      const direction = past ? -amount.value : amount.value;
+      const noun = amount.value === 1 ? entry.noun : entry.dative;
+      const canonical = `${period.value.canonical} ${past ? "vor" : "in"} ${amount.value} ${title(noun)}`;
+      return Option.some(shiftPeriod(period.value, direction, entry.unit, canonical));
+    }
+  }
+
   const edge = EffectString.match(/^(anfang|beginn|ende) (.+)$/u)(input);
   if (Option.isSome(edge)) {
     const edgeName = textAt(edge.value, 1);
@@ -880,7 +959,20 @@ const suggestGerman = (input: string, limit: number) => {
   );
 };
 
-const renderGerman = (range: DateRangeExpr) => {
+// RETURN TYPE: Recursive shifted-period rendering requires an explicit result type.
+const renderGerman = (range: DateRangeExpr): Option.Option<string> => {
+  const shifted = decomposeShiftedPeriodRange(range);
+  if (Option.isSome(shifted)) {
+    const base = renderGerman(shifted.value.baseRange);
+    const entry = unitPhrases.find((unit) => unit.unit === shifted.value.unit);
+    if (Option.isSome(base) && entry !== undefined) {
+      const amount = Math.abs(shifted.value.amount);
+      const noun = amount === 1 ? entry.noun : entry.dative;
+      const direction = shifted.value.amount < 0 ? "vor" : "in";
+      return Option.some(`${base.value} ${direction} ${amount} ${title(noun)}`);
+    }
+  }
+
   const offset = calendarPeriodOffset(range);
   if (Option.isSome(offset) && Math.abs(offset.value.amount) > 1) {
     const entry = unitPhrases.find((unit) => unit.unit === offset.value.unit);
@@ -1014,8 +1106,8 @@ export const GermanContribution = new BaseLanguageContribution({
     "zwischen",
     "zuvor",
   ],
-  normalize: normalizeNaturalText,
-  correct: correctWhitespaceSeparatedText,
+  normalize: normalizeGerman,
+  correct: correctGerman,
   parseExact: parseGerman,
   suggest: suggestGerman,
   render: renderGerman,

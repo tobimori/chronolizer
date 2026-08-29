@@ -16,7 +16,11 @@ import {
   absoluteDatePeriod,
   calendarPeriodOffset,
   candidate,
+  compoundCountAliases,
+  sequentialCountAliases,
+  countAliasVocabulary,
   currentYearDatePeriods,
+  decimalTens,
   datedPeriods,
   datedQuarterPeriods,
   fixedDatePeriod,
@@ -45,6 +49,9 @@ import {
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
+  compileCountAliasNormalizer,
+  decomposeShiftedPeriodRange,
+  shiftPeriod,
   textAt,
   trailingPeriod,
   trailingRange,
@@ -67,6 +74,51 @@ const months = [
   "kasım",
   "aralık",
 ] as const;
+
+const turkishCountWords = [
+  ["iki"],
+  ["üç", "uc"],
+  ["dört", "dort"],
+  ["beş", "bes"],
+  ["altı", "alti"],
+  ["yedi"],
+  ["sekiz"],
+  ["dokuz"],
+  ["on"],
+  ["on bir"],
+  ["on iki"],
+  ["on üç"],
+  ["on dört"],
+  ["on beş"],
+  ["on altı"],
+  ["on yedi"],
+  ["on sekiz"],
+  ["on dokuz"],
+  ["yirmi"],
+] as const;
+const turkishCountOnes = [
+  [1, "bir"],
+  [2, "iki"],
+  [3, "üç"],
+  [4, "dört"],
+  [5, "beş"],
+  [6, "altı"],
+  [7, "yedi"],
+  [8, "sekiz"],
+  [9, "dokuz"],
+] as const;
+const turkishCountAliases = [
+  ...sequentialCountAliases(turkishCountWords, 2),
+  ...compoundCountAliases(
+    decimalTens(["yirmi", "otuz", "kırk", "elli", "altmış", "yetmiş", "seksen", "doksan"]),
+    turkishCountOnes,
+    (ten, one) => [`${ten} ${one}`],
+  ),
+];
+const normalizeTurkishCounts = compileCountAliasNormalizer(turkishCountAliases);
+const turkishCountVocabulary = new Set(countAliasVocabulary(turkishCountAliases));
+const correctTurkish = (input: string, vocabulary: ReadonlyArray<string>) =>
+  correctWhitespaceSeparatedText(input, vocabulary, turkishCountVocabulary);
 
 const monthAbbreviations = [
   ["oca"],
@@ -394,7 +446,32 @@ const parseBasePeriod = (input: string) => {
   return Option.none<Period>();
 };
 
-const parsePeriod = (input: string) => {
+// RETURN TYPE: Recursive period offsets require an explicit result type.
+const parsePeriod = (input: string): Option.Option<Period> => {
+  const prefix = EffectString.match(
+    /^([1-9]\d*) (gün|gun|hafta|ay|çeyrek|ceyrek|yıl|yil|sene) (önce|sonra) (.+)$/u,
+  )(input);
+  const suffix = EffectString.match(
+    /^(.+) ([1-9]\d*) (gün|gun|hafta|ay|çeyrek|ceyrek|yıl|yil|sene) (önce|sonra)$/u,
+  )(input);
+  const shifted = Option.firstSomeOf([prefix, suffix]);
+  if (Option.isSome(shifted)) {
+    const prefixOrder = Option.isSome(prefix);
+    const amount = parseTrailingCount(textAt(shifted.value, prefixOrder ? 1 : 2));
+    const alias = unitAliases.find(
+      (unit) => unit[0] === textAt(shifted.value, prefixOrder ? 2 : 3),
+    );
+    const entry = alias === undefined ? undefined : units.find((unit) => unit.unit === alias[1]);
+    const period = parsePeriod(textAt(shifted.value, prefixOrder ? 4 : 1));
+    if (Option.isSome(amount) && entry !== undefined && Option.isSome(period)) {
+      const past = textAt(shifted.value, prefixOrder ? 3 : 4) === "önce";
+      const direction = past ? -amount.value : amount.value;
+      const noun = amount.value === 1 ? entry.singular : entry.plural;
+      const canonical = `${amount.value} ${noun} ${past ? "önce" : "sonra"} ${period.value.canonical}`;
+      return Option.some(shiftPeriod(period.value, direction, entry.unit, canonical));
+    }
+  }
+
   const edge = EffectString.match(/^(.+?)(?:ın|in|un|ün) (başı|başlangıcı|sonu)$/u)(input);
   if (Option.isSome(edge)) {
     const period = parseBasePeriod(textAt(edge.value, 1));
@@ -714,7 +791,20 @@ const suggestTurkish = (input: string, limit: number) => {
   );
 };
 
-const renderTurkish = (range: DateRangeExpr) => {
+// RETURN TYPE: Recursive shifted-period rendering requires an explicit result type.
+const renderTurkish = (range: DateRangeExpr): Option.Option<string> => {
+  const shifted = decomposeShiftedPeriodRange(range);
+  if (Option.isSome(shifted)) {
+    const base = renderTurkish(shifted.value.baseRange);
+    const entry = units.find((unit) => unit.unit === shifted.value.unit);
+    if (Option.isSome(base) && entry !== undefined) {
+      const amount = Math.abs(shifted.value.amount);
+      const noun = amount === 1 ? entry.singular : entry.plural;
+      const direction = shifted.value.amount < 0 ? "önce" : "sonra";
+      return Option.some(`${amount} ${noun} ${direction} ${base.value}`);
+    }
+  }
+
   const offset = calendarPeriodOffset(range);
   if (Option.isSome(offset) && Math.abs(offset.value.amount) > 1) {
     const entry = units.find((unit) => unit.unit === offset.value.unit);
@@ -781,7 +871,7 @@ const renderTurkish = (range: DateRangeExpr) => {
 };
 
 const normalizeTurkish = (input: string, locale: string) =>
-  normalizeNaturalText(input, locale).replaceAll("’", "'");
+  normalizeTurkishCounts(normalizeNaturalText(input, locale).replaceAll("’", "'"));
 
 export const TurkishContribution = new BaseLanguageContribution({
   locale: "tr",
@@ -816,7 +906,7 @@ export const TurkishContribution = new BaseLanguageContribution({
     "şimdiye",
   ],
   normalize: normalizeTurkish,
-  correct: correctWhitespaceSeparatedText,
+  correct: correctTurkish,
   parseExact: parseTurkish,
   suggest: suggestTurkish,
   render: renderTurkish,

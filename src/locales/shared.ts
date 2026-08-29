@@ -32,6 +32,75 @@ import { NaturalCandidate } from "../language/model.ts";
 export const textAt = (values: ReadonlyArray<string | undefined>, index: number) =>
   values[index] ?? "";
 
+export type CountAlias = readonly [phrase: string, amount: number];
+
+export const sequentialCountAliases = (
+  words: ReadonlyArray<ReadonlyArray<string>>,
+  start: number,
+) => words.flatMap((aliases, index) => aliases.map((phrase) => [phrase, start + index] as const));
+
+export const decimalTens = (words: ReadonlyArray<string>) =>
+  words.map((word, index) => [20 + index * 10, word] as const);
+
+export const compoundCountAliases = (
+  tens: ReadonlyArray<readonly [amount: number, word: string]>,
+  ones: ReadonlyArray<readonly [amount: number, word: string]>,
+  join: (tensWord: string, oneWord: string, amount: number) => ReadonlyArray<string>,
+) =>
+  tens.flatMap(([tensAmount, tensWord]) =>
+    ones.flatMap(([oneAmount, oneWord]) => {
+      const amount = tensAmount + oneAmount;
+      return join(tensWord, oneWord, amount).map((phrase) => [phrase, amount] as const);
+    }),
+  );
+
+export const countAliasVocabulary = (aliases: ReadonlyArray<CountAlias>) => [
+  ...new Set(aliases.flatMap(([phrase]) => phrase.split(" "))),
+];
+
+export const compileCountAliasNormalizer = (aliases: ReadonlyArray<CountAlias>) => {
+  const distinct = new Map<string, number>();
+  for (const [phrase, amount] of aliases) {
+    if (!distinct.has(phrase)) distinct.set(phrase, amount);
+  }
+
+  const byFirstWord = new Map<
+    string,
+    ReadonlyArray<{ readonly amount: number; readonly parts: ReadonlyArray<string> }>
+  >();
+  for (const [phrase, amount] of distinct) {
+    const parts = phrase.split(" ");
+    const first = parts[0] ?? "";
+    const entries = byFirstWord.get(first) ?? [];
+    byFirstWord.set(first, [...entries, { amount, parts }]);
+  }
+  for (const [first, entries] of byFirstWord) {
+    byFirstWord.set(
+      first,
+      [...entries].sort((left, right) => right.parts.length - left.parts.length),
+    );
+  }
+
+  return (input: string) => {
+    const words = input.split(" ");
+    const output: Array<string> = [];
+    for (let index = 0; index < words.length;) {
+      const candidates = byFirstWord.get(words[index] ?? "") ?? [];
+      const alias = candidates.find((entry) =>
+        entry.parts.every((part, offset) => words[index + offset] === part),
+      );
+      if (alias === undefined) {
+        output.push(words[index] ?? "");
+        index += 1;
+      } else {
+        output.push(String(alias.amount));
+        index += alias.parts.length;
+      }
+    }
+    return output.join(" ");
+  };
+};
+
 export const Period = Schema.Struct({
   start: InstantExpr,
   end: InstantExpr,
@@ -48,6 +117,43 @@ const isStartOf = Schema.is(StartOf);
 
 export const periodRange = (period: Period) =>
   boundedRange(greaterThanOrEqual(period.start), lessThan(period.end));
+
+export const shiftPeriod = (period: Period, amount: number, unit: Unit, canonical: string) =>
+  Period.make({
+    start: shift(period.start, amount, unit),
+    end: shift(period.end, amount, unit),
+    canonical,
+  });
+
+export const decomposeShiftedPeriodRange = (range: DateRangeExpr) => {
+  if (!isGreaterThanOrEqual(range.lower) || !isLessThan(range.upper)) {
+    return Option.none<{
+      readonly amount: number;
+      readonly unit: Unit;
+      readonly baseRange: DateRangeExpr;
+    }>();
+  }
+  const start = range.lower.value;
+  const end = range.upper.value;
+  if (
+    !isShift(start) ||
+    !isShift(end) ||
+    start.amount === 0 ||
+    start.amount !== end.amount ||
+    start.unit !== end.unit
+  ) {
+    return Option.none<{
+      readonly amount: number;
+      readonly unit: Unit;
+      readonly baseRange: DateRangeExpr;
+    }>();
+  }
+  return Option.some({
+    amount: start.amount,
+    unit: start.unit,
+    baseRange: boundedRange(greaterThanOrEqual(start.base), lessThan(end.base)),
+  });
+};
 
 export const periodToDateRange = (unit: Unit) =>
   boundedRange(greaterThanOrEqual(startOf(now(), unit)), lessThanOrEqual(now()));
