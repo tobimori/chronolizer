@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "chronolizer-playground",
+  "account_id": "cc336c41338d4a4833ea1030db5eec88",
   "compatibility_date": "2026-08-29",
   "assets": {
     "directory": "./dist",
