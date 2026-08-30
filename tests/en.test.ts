@@ -544,6 +544,19 @@ describe("English date ranges", () => {
   );
 
   it.effect.each([
+    ["now to next Thursday", { gte: "now", lt: "now+1w/w+4d" }],
+    ["next October", { gte: "now+1y/y+9M", lt: "now+1y/y+10M" }],
+    ["start of year", { gte: "now/y", lt: "now/y+1d" }],
+    ["three days before start of month", { gte: "now/M-3d", lt: "now/M-2d" }],
+  ] as const)(
+    "maps concise English period %s",
+    Effect.fn(function* (testCase) {
+      const [input, filter] = testCase;
+      expect(formatFilter((yield* parseEnglish(input)).range)).toEqual(filter);
+    }),
+  );
+
+  it.effect.each([
     ["January 1–15, 2025", "2025-01-01", "2025-01-16"],
     ["1st through 15th January 2025", "2025-01-01", "2025-01-16"],
     ["January 1-15", "now/y", "now/y+15d"],

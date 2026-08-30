@@ -47,6 +47,7 @@ import {
   periodToDateRange,
   quarterOfRelativeYear,
   relativePeriod,
+  relativeWeekday,
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
@@ -75,6 +76,22 @@ const months = [
   "noviembre",
   "diciembre",
 ] as const;
+
+const weekdays = [
+  "lunes",
+  "martes",
+  "miércoles",
+  "jueves",
+  "viernes",
+  "sábado",
+  "domingo",
+] as const;
+const nextWeekdays = weekdays.flatMap((weekday, day) => [
+  { phrase: `próximo ${weekday}`, day, canonical: `el próximo ${weekday}` },
+  { phrase: `el próximo ${weekday}`, day, canonical: `el próximo ${weekday}` },
+  { phrase: `proximo ${weekday}`, day, canonical: `el próximo ${weekday}` },
+  { phrase: `el proximo ${weekday}`, day, canonical: `el próximo ${weekday}` },
+]);
 
 const spanishCountWords = [
   ["dos"],
@@ -478,6 +495,28 @@ const parseBasePeriod = (input: string) => {
     }
   }
 
+  const prefixedRelativeMonth = EffectString.match(
+    /^(pasado|próximo|proximo|este) ([a-záéíóúñ]+\.?)$/u,
+  )(input);
+  const suffixedRelativeMonth = EffectString.match(/^([a-záéíóúñ]+\.?) (pasado|próximo|proximo)$/u)(
+    input,
+  );
+  const shortRelativeMonth = Option.firstSomeOf([prefixedRelativeMonth, suffixedRelativeMonth]);
+  if (Option.isSome(shortRelativeMonth)) {
+    const prefixed = Option.isSome(prefixedRelativeMonth);
+    const month = monthNumber(textAt(shortRelativeMonth.value, prefixed ? 2 : 1));
+    if (month !== undefined) {
+      const modifier = textAt(shortRelativeMonth.value, prefixed ? 1 : 2);
+      const direction = relativeYearDirection(modifier);
+      let canonicalModifier = "este";
+      if (direction < 0) canonicalModifier = "pasado";
+      if (direction > 0) canonicalModifier = "próximo";
+      return Option.some(
+        monthOfRelativeYear(month, direction, `${canonicalModifier} ${textAt(months, month - 1)}`),
+      );
+    }
+  }
+
   const relativeMonth = EffectString.match(
     /^([a-záéíóúñ]+\.?) (del año pasado|del ano pasado|del próximo año|del proximo año|de este año|de este ano)$/u,
   )(input);
@@ -518,7 +557,11 @@ const parseBasePeriod = (input: string) => {
   if (input === "el fin de semana después del próximo") {
     return Option.some(relativeWeekend(2, input));
   }
-  return Option.none<Period>();
+
+  const weekday = nextWeekdays.find((entry) => entry.phrase === input);
+  return weekday === undefined
+    ? Option.none<Period>()
+    : Option.some(relativeWeekday(weekday.day, 1, weekday.canonical));
 };
 
 // RETURN TYPE: Recursive period offsets require an explicit result type.
@@ -545,7 +588,13 @@ const parsePeriod = (input: string): Option.Option<Period> => {
   )(input);
   if (Option.isSome(edge)) {
     const edgeName = textAt(edge.value, 1);
-    const period = parseBasePeriod(textAt(edge.value, 2));
+    const periodText = textAt(edge.value, 2);
+    const basePeriod = parseBasePeriod(periodText);
+    const implicit = units.find((entry) => entry.singular === periodText);
+    const period =
+      Option.isSome(basePeriod) || implicit === undefined
+        ? basePeriod
+        : Option.some(relativePeriod(implicit.unit, 0, implicit.current));
     if (Option.isSome(period)) {
       const isEnd = edgeName === "fin" || edgeName === "final";
       const canonical = `${isEnd ? "final" : "inicio"} ${withDe(period.value.canonical)}`;
@@ -807,7 +856,7 @@ const parseSpanish = (input: string) => {
       ["desde ", " hasta hoy"],
       ["entre ", " y hoy"],
     ],
-    ["desde ahora hasta ", "desde hoy hasta ", "entre hoy y ", "entre hoy y el "],
+    ["desde ahora hasta ", "desde hoy hasta ", "entre hoy y ", "entre hoy y el ", "ahora hasta "],
     parsePeriod,
     (period) => `desde ${period} hasta ahora`,
     (period) => `desde ahora hasta ${period}`,
@@ -867,7 +916,16 @@ const staticPeriodPhrases = [
     `t${quarter} del año pasado`,
     `t${quarter} del próximo año`,
   ]),
-  ...months.flatMap((month) => [month, `${month} del año pasado`, `${month} del próximo año`]),
+  ...months.flatMap((month) => [
+    month,
+    `pasado ${month}`,
+    `próximo ${month}`,
+    `${month} pasado`,
+    `${month} próximo`,
+    `${month} del año pasado`,
+    `${month} del próximo año`,
+  ]),
+  ...nextWeekdays.map((entry) => entry.phrase),
 ];
 
 const staticPeriods = periodsFromPhrases(staticPeriodPhrases, parsePeriod);
@@ -998,6 +1056,7 @@ export const SpanishContribution = new BaseLanguageContribution({
   locale: "es",
   vocabulary: [
     ...months,
+    ...weekdays,
     ...monthAbbreviations.flatMap((aliases) => aliases),
     ...units.flatMap((entry) => [
       entry.singular,

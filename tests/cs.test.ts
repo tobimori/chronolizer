@@ -312,6 +312,19 @@ describe("Czech date ranges", () => {
   );
 
   it.effect.each([
+    ["od dneška do příštího čtvrtka", { gte: "now", lt: "now+1w/w+4d" }],
+    ["příští říjen", { gte: "now+1y/y+9M", lt: "now+1y/y+10M" }],
+    ["začátek roku", { gte: "now/y", lt: "now/y+1d" }],
+    ["začátek měsíce před třemi dny", { gte: "now/M-3d", lt: "now/M-2d" }],
+  ] as const)(
+    "maps concise Czech period %s",
+    Effect.fn(function* (testCase) {
+      const [input, filter] = testCase;
+      expect(formatFilter((yield* parseCzech(input)).range)).toEqual(filter);
+    }),
+  );
+
+  it.effect.each([
     ["zbytek měsíce", "now/M+1M"],
     ["zbytek týdne", "now/w+1w"],
     ["zbytek roku", "now/y+1y"],

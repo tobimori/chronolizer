@@ -43,6 +43,7 @@ import {
   periodToDateRange,
   quarterOfRelativeYear,
   relativePeriod,
+  relativeWeekday,
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
@@ -86,6 +87,18 @@ const monthAbbreviations = [
   ["nov"],
   ["dec"],
 ] as const;
+
+const weekdays = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
+
+const nextWeekdayPhrases = weekdays.map((weekday) => `next ${weekday}`);
 
 const quarterNames = ["first", "second", "third", "fourth"] as const;
 
@@ -323,6 +336,21 @@ const parseBasePeriod = (input: string) => {
     }
   }
 
+  const prefixedRelativeMonth = EffectString.match(/^(last|this|next) ([a-z]+\.?)$/u)(input);
+  if (Option.isSome(prefixedRelativeMonth)) {
+    const directionText = textAt(prefixedRelativeMonth.value, 1);
+    const month = monthNumber(textAt(prefixedRelativeMonth.value, 2));
+    if (month !== undefined) {
+      return Option.some(
+        monthOfRelativeYear(
+          month,
+          relativeDirection(directionText),
+          `${directionText} ${title(textAt(months, month - 1))}`,
+        ),
+      );
+    }
+  }
+
   const relativeMonth = EffectString.match(/^([a-z]+\.?) (?:of )?(last|this|next) year$/u)(input);
   if (Option.isSome(relativeMonth)) {
     const directionText = textAt(relativeMonth.value, 2);
@@ -367,6 +395,11 @@ const parseBasePeriod = (input: string) => {
   }
   if (input === "the weekend after next") {
     return Option.some(relativeWeekend(2, "the weekend after next"));
+  }
+
+  const weekday = nextWeekdayPhrases.indexOf(input);
+  if (weekday !== -1) {
+    return Option.some(relativeWeekday(weekday, 1, `next ${title(textAt(weekdays, weekday))}`));
   }
 
   const articlePeriod = EffectString.match(/^the (day|week|month|quarter|year)$/u)(input);
@@ -454,7 +487,13 @@ const parsePeriod = (input: string): Option.Option<Period> => {
 
   const edge = EffectString.match(/^(?:the )?(start|beginning|end) of (.+)$/u)(input);
   if (Option.isSome(edge)) {
-    const period = parseBasePeriod(textAt(edge.value, 2));
+    const periodText = textAt(edge.value, 2);
+    const basePeriod = parseBasePeriod(periodText);
+    const implicit = units.find((entry) => entry[0] === periodText);
+    const period =
+      Option.isSome(basePeriod) || implicit === undefined
+        ? basePeriod
+        : Option.some(relativePeriod(implicit[1], 0, currentPeriod(implicit[0])));
     if (Option.isSome(period)) {
       const edgeName = textAt(edge.value, 1);
       const name = edgeName === "beginning" ? "start" : edgeName;
@@ -642,7 +681,7 @@ const parseEnglish = (input: string) => {
       ["from ", " to date"],
       ["between ", " and now"],
     ],
-    ["from now to ", "from now until ", "from now through ", "between now and "],
+    ["from now to ", "from now until ", "from now through ", "between now and ", "now to "],
     parsePeriod,
     (period) => `from ${period} to now`,
     (period) => `from now to ${period}`,
@@ -719,7 +758,14 @@ const staticPeriodPhrases = [
     `q${quarter} of last year`,
     `q${quarter} of next year`,
   ]),
-  ...months.flatMap((month) => [month, `${month} of last year`, `${month} of next year`]),
+  ...months.flatMap((month) => [
+    month,
+    `last ${month}`,
+    `next ${month}`,
+    `${month} of last year`,
+    `${month} of next year`,
+  ]),
+  ...nextWeekdayPhrases,
 ];
 
 const staticPeriods = periodsFromPhrases(staticPeriodPhrases, parsePeriod);
@@ -847,6 +893,7 @@ export const EnglishContribution = new BaseLanguageContribution({
   locale: "en",
   vocabulary: [
     ...months,
+    ...weekdays,
     ...quarterNames,
     "q1",
     "q2",

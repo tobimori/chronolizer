@@ -46,6 +46,7 @@ import {
   periodToDateRange,
   quarterOfRelativeYear,
   relativePeriod,
+  relativeWeekday,
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
@@ -244,6 +245,21 @@ const unitPhrases: ReadonlyArray<UnitPhrases> = [
 
 const title = (value: string) => `${value.slice(0, 1).toLocaleUpperCase("de")}${value.slice(1)}`;
 
+const weekdays = [
+  "montag",
+  "dienstag",
+  "mittwoch",
+  "donnerstag",
+  "freitag",
+  "samstag",
+  "sonntag",
+] as const;
+
+const nextWeekdays = weekdays.flatMap((weekday, day) => [
+  { phrase: `nächster ${weekday}`, day, canonical: `nächster ${title(weekday)}` },
+  { phrase: `nächsten ${weekday}`, day, canonical: `nächster ${title(weekday)}` },
+]);
+
 const canonicalToDate = (entry: UnitPhrases) => `seit ${title(entry.compound)}beginn`;
 
 const canonicalRelative = (value: string) => {
@@ -439,8 +455,8 @@ const quarterNumber = (value: string) => {
 };
 
 const relativeDirection = (value: string) => {
-  if (value === "letzten") return -1;
-  if (value === "nächsten") return 1;
+  if (value.startsWith("letzt")) return -1;
+  if (value.startsWith("nächst")) return 1;
   return 0;
 };
 
@@ -512,6 +528,20 @@ const parseBasePeriod = (input: string) => {
     }
   }
 
+  const prefixedRelativeMonth = EffectString.match(/^(letzter|dieser|nächster) ([a-zäöüß]+\.?)$/u)(
+    input,
+  );
+  if (Option.isSome(prefixedRelativeMonth)) {
+    const month = monthNumber(textAt(prefixedRelativeMonth.value, 2));
+    if (month !== undefined) {
+      const modifier = textAt(prefixedRelativeMonth.value, 1);
+      const direction = relativeDirection(modifier);
+      return Option.some(
+        monthOfRelativeYear(month, direction, `${modifier} ${title(textAt(months, month - 1))}`),
+      );
+    }
+  }
+
   const relativeMonth = EffectString.match(/^([a-zäöüß]+\.?) (letzten|dieses|nächsten) jahres$/u)(
     input,
   );
@@ -551,6 +581,11 @@ const parseBasePeriod = (input: string) => {
   }
   if (input === "übernächstes wochenende") {
     return Option.some(relativeWeekend(2, "übernächstes Wochenende"));
+  }
+
+  const weekday = nextWeekdays.find((entry) => entry.phrase === input);
+  if (weekday !== undefined) {
+    return Option.some(relativeWeekday(weekday.day, 1, weekday.canonical));
   }
 
   const relative = unitPhrases.find(
@@ -595,7 +630,13 @@ const parsePeriod = (input: string): Option.Option<Period> => {
   const edge = EffectString.match(/^(anfang|beginn|ende) (.+)$/u)(input);
   if (Option.isSome(edge)) {
     const edgeName = textAt(edge.value, 1);
-    const period = parseBasePeriod(textAt(edge.value, 2));
+    const periodText = textAt(edge.value, 2);
+    const basePeriod = parseBasePeriod(periodText);
+    const implicit = unitPhrases.find((entry) => entry.genitive === periodText);
+    const period =
+      Option.isSome(basePeriod) || implicit === undefined
+        ? basePeriod
+        : Option.some(relativePeriod(implicit.unit, 0, implicit.current));
     if (Option.isSome(period)) {
       const name = edgeName === "ende" ? "Ende" : "Anfang";
       const canonical = `${name} ${withRelativeGenitive(period.value.canonical)}`;
@@ -829,7 +870,7 @@ const parseGerman = (input: string) => {
       ["vom ", " bis heute"],
       ["zwischen ", " und heute"],
     ],
-    ["von heute bis ", "zwischen heute und "],
+    ["von heute bis ", "zwischen heute und ", "heute bis ", "jetzt bis "],
     parsePeriod,
     (period) => `von ${period} bis heute`,
     (period) => `von heute bis ${period}`,
@@ -896,7 +937,14 @@ const staticPeriodPhrases = [
     `q${quarter} letzten jahres`,
     `q${quarter} nächsten jahres`,
   ]),
-  ...months.flatMap((month) => [month, `${month} letzten jahres`, `${month} nächsten jahres`]),
+  ...months.flatMap((month) => [
+    month,
+    `letzter ${month}`,
+    `nächster ${month}`,
+    `${month} letzten jahres`,
+    `${month} nächsten jahres`,
+  ]),
+  ...nextWeekdays.map((entry) => entry.phrase),
 ];
 
 const staticPeriods = periodsFromPhrases(staticPeriodPhrases, parsePeriod);
@@ -1039,6 +1087,7 @@ export const GermanContribution = new BaseLanguageContribution({
   locale: "de",
   vocabulary: [
     ...months,
+    ...weekdays,
     ...quarterNames,
     "q1",
     "q2",

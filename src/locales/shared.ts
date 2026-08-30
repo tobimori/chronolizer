@@ -182,6 +182,13 @@ export const periodDay = (period: Period, day: number, canonical: string) => {
 export const periodPreviousDay = (period: Period, canonical: string) =>
   Period.make({ start: shift(period.start, -1, "day"), end: period.start, canonical });
 
+export const relativeWeekday = (day: number, direction: number, canonical: string) => {
+  const weekBase = direction === 0 ? now() : shift(now(), direction, "week");
+  const weekStart = startOf(weekBase, "week");
+  const start = day === 0 ? weekStart : shift(weekStart, day, "day");
+  return Period.make({ start, end: shift(start, 1, "day"), canonical });
+};
+
 export const relativeWeekend = (direction: number, canonical: string) => {
   const weekBase = direction === 0 ? now() : shift(now(), direction, "week");
   const weekStart = startOf(weekBase, "week");

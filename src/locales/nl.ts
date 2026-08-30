@@ -46,6 +46,7 @@ import {
   periodToDateRange,
   quarterOfRelativeYear,
   relativePeriod,
+  relativeWeekday,
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
@@ -74,6 +75,17 @@ const months = [
   "november",
   "december",
 ] as const;
+
+const weekdays = [
+  "maandag",
+  "dinsdag",
+  "woensdag",
+  "donderdag",
+  "vrijdag",
+  "zaterdag",
+  "zondag",
+] as const;
+const nextWeekdayPhrases = weekdays.map((weekday) => `volgende ${weekday}`);
 
 const dutchCountWords = [
   "twee",
@@ -428,6 +440,18 @@ const parseBasePeriod = (input: string) => {
     }
   }
 
+  const prefixedRelativeMonth = EffectString.match(/^(vorige|deze|volgende) ([a-z]+\.?)$/u)(input);
+  if (Option.isSome(prefixedRelativeMonth)) {
+    const month = monthNumber(textAt(prefixedRelativeMonth.value, 2));
+    if (month !== undefined) {
+      const modifier = textAt(prefixedRelativeMonth.value, 1);
+      const direction = relativeYearDirection(modifier);
+      return Option.some(
+        monthOfRelativeYear(month, direction, `${modifier} ${textAt(months, month - 1)}`),
+      );
+    }
+  }
+
   const relativeMonth = EffectString.match(
     /^([a-z]+\.?)(?: van)? (vorig jaar|volgend jaar|dit jaar)$/u,
   )(input);
@@ -477,7 +501,11 @@ const parseBasePeriod = (input: string) => {
   if (input === "het weekend na het volgende") {
     return Option.some(relativeWeekend(2, input));
   }
-  return Option.none<Period>();
+
+  const weekday = nextWeekdayPhrases.indexOf(input);
+  return weekday === -1
+    ? Option.none<Period>()
+    : Option.some(relativeWeekday(weekday, 1, nextWeekdayPhrases[weekday] ?? input));
 };
 
 // RETURN TYPE: Recursive period offsets require an explicit result type.
@@ -506,7 +534,13 @@ const parsePeriod = (input: string): Option.Option<Period> => {
   const edge = EffectString.match(/^(?:het )?(begin|eind|einde)(?: van)? (.+)$/u)(input);
   if (Option.isSome(edge)) {
     const edgeName = textAt(edge.value, 1);
-    const period = parseBasePeriod(textAt(edge.value, 2));
+    const periodText = textAt(edge.value, 2);
+    const basePeriod = parseBasePeriod(periodText);
+    const implicit = units.find((entry) => `${entry.article} ${entry.singular}` === periodText);
+    const period =
+      Option.isSome(basePeriod) || implicit === undefined
+        ? basePeriod
+        : Option.some(relativePeriod(implicit.unit, 0, implicit.current));
     if (Option.isSome(period)) {
       const isEnd = edgeName === "eind" || edgeName === "einde";
       const canonical = `${isEnd ? "eind" : "begin"} van ${period.value.canonical}`;
@@ -689,7 +723,7 @@ const parseDutch = (input: string) => {
       ["sinds ", " tot nu toe"],
       ["tussen ", " en vandaag"],
     ],
-    ["vanaf nu tot en met ", "van vandaag tot en met ", "tussen vandaag en "],
+    ["vanaf nu tot en met ", "van vandaag tot en met ", "tussen vandaag en ", "nu tot en met "],
     parsePeriod,
     (period) => `vanaf ${period} tot nu toe`,
     (period) => `vanaf nu tot en met ${period}`,
@@ -745,7 +779,14 @@ const staticPeriodPhrases = [
     `k${quarter} vorig jaar`,
     `k${quarter} volgend jaar`,
   ]),
-  ...months.flatMap((month) => [month, `${month} vorig jaar`, `${month} volgend jaar`]),
+  ...months.flatMap((month) => [
+    month,
+    `vorige ${month}`,
+    `volgende ${month}`,
+    `${month} vorig jaar`,
+    `${month} volgend jaar`,
+  ]),
+  ...nextWeekdayPhrases,
 ];
 
 const staticPeriods = periodsFromPhrases(staticPeriodPhrases, parsePeriod);
@@ -882,6 +923,7 @@ export const DutchContribution = new BaseLanguageContribution({
   locale: "nl",
   vocabulary: [
     ...months,
+    ...weekdays,
     ...monthAbbreviations.flatMap((aliases) => aliases),
     ...units.flatMap((entry) => [
       entry.singular,

@@ -46,6 +46,7 @@ import {
   periodToDateRange,
   quarterOfRelativeYear,
   relativePeriod,
+  relativeWeekday,
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
@@ -74,6 +75,17 @@ const months = [
   "kasım",
   "aralık",
 ] as const;
+
+const weekdays = [
+  "pazartesi",
+  "salı",
+  "çarşamba",
+  "perşembe",
+  "cuma",
+  "cumartesi",
+  "pazar",
+] as const;
+const nextWeekdayPhrases = weekdays.map((weekday) => `gelecek ${weekday}`);
 
 const turkishCountWords = [
   ["iki"],
@@ -394,6 +406,20 @@ const parseBasePeriod = (input: string) => {
     }
   }
 
+  const prefixedRelativeMonth = EffectString.match(/^(geçen|bu|gelecek) ([a-zçğıöşü]+\.?)$/u)(
+    input,
+  );
+  if (Option.isSome(prefixedRelativeMonth)) {
+    const month = monthNumber(textAt(prefixedRelativeMonth.value, 2));
+    if (month !== undefined) {
+      const modifier = textAt(prefixedRelativeMonth.value, 1);
+      const direction = relativeYearDirection(modifier);
+      return Option.some(
+        monthOfRelativeYear(month, direction, `${modifier} ${title(textAt(months, month - 1))}`),
+      );
+    }
+  }
+
   const relativeMonth = EffectString.match(/^([a-zçğıöşü]+\.?) (geçen yıl|gelecek yıl|bu yıl)$/u)(
     input,
   );
@@ -443,7 +469,11 @@ const parseBasePeriod = (input: string) => {
   if (input === "gelecek hafta sonundan sonraki hafta sonu") {
     return Option.some(relativeWeekend(2, input));
   }
-  return Option.none<Period>();
+
+  const weekday = nextWeekdayPhrases.indexOf(input);
+  return weekday === -1
+    ? Option.none<Period>()
+    : Option.some(relativeWeekday(weekday, 1, nextWeekdayPhrases[weekday] ?? input));
 };
 
 // RETURN TYPE: Recursive period offsets require an explicit result type.
@@ -474,7 +504,14 @@ const parsePeriod = (input: string): Option.Option<Period> => {
 
   const edge = EffectString.match(/^(.+?)(?:ın|in|un|ün) (başı|başlangıcı|sonu)$/u)(input);
   if (Option.isSome(edge)) {
-    const period = parseBasePeriod(textAt(edge.value, 1));
+    const periodText = textAt(edge.value, 1);
+    const basePeriod = parseBasePeriod(periodText);
+    const implicitUnit = unitAliases.find((entry) => entry[0] === periodText)?.[1];
+    const implicit = units.find((entry) => entry.unit === implicitUnit);
+    const period =
+      Option.isSome(basePeriod) || implicit === undefined
+        ? basePeriod
+        : Option.some(relativePeriod(implicit.unit, 0, implicit.current));
     if (Option.isSome(period)) {
       const isEnd = textAt(edge.value, 2) === "sonu";
       const canonical = `${period.value.canonical} ${isEnd ? "sonu" : "başı"}`;
@@ -675,7 +712,7 @@ const parseTurkish = (input: string) => {
       ["", " ile bugün"],
       ["", " ve bugün"],
     ],
-    ["bugün ile ", "bugün ve "],
+    ["bugün ile ", "bugün ve ", "şimdi ile ", "şimdi ve "],
     parsePeriod,
     (period) => `${period} ile bugün arası`,
     (period) => `bugün ile ${period} arası`,
@@ -727,6 +764,8 @@ const staticPeriodPhrases = [
   "geçen yılın sonu",
   "gelecek yılın başı",
   "gelecek yılın sonu",
+  ...nextWeekdayPhrases,
+  ...months.flatMap((month) => [`geçen ${month}`, `gelecek ${month}`]),
   ...[1, 2, 3, 4].flatMap((quarter) => [
     `ç${quarter}`,
     `ç${quarter} bu yıl`,
@@ -869,6 +908,7 @@ export const TurkishContribution = new BaseLanguageContribution({
   locale: "tr",
   vocabulary: [
     ...months,
+    ...weekdays,
     ...monthAbbreviations.flatMap((aliases) => aliases),
     ...units.flatMap((entry) => [
       entry.singular,

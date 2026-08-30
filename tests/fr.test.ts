@@ -370,6 +370,19 @@ describe("French date ranges", () => {
   );
 
   it.effect.each([
+    ["maintenant à jeudi prochain", { gte: "now", lt: "now+1w/w+4d" }],
+    ["octobre prochain", { gte: "now+1y/y+9M", lt: "now+1y/y+10M" }],
+    ["début de l'année", { gte: "now/y", lt: "now/y+1d" }],
+    ["début du mois il y a trois jours", { gte: "now/M-3d", lt: "now/M-2d" }],
+  ] as const)(
+    "maps concise French period %s",
+    Effect.fn(function* (testCase) {
+      const [input, filter] = testCase;
+      expect(formatFilter((yield* parseFrench(input)).range)).toEqual(filter);
+    }),
+  );
+
+  it.effect.each([
     ["reste du mois", "now/M+1M"],
     ["reste de cette semaine", "now/w+1w"],
     ["ce qui reste de l'année", "now/y+1y"],

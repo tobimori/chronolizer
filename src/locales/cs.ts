@@ -45,6 +45,7 @@ import {
   periodToDateRange,
   quarterOfRelativeYear,
   relativePeriod,
+  relativeWeekday,
   relativeWeekend,
   remainingPeriodRange,
   renderPeriodRange,
@@ -73,6 +74,25 @@ const months = [
   "listopad",
   "prosinec",
 ] as const;
+
+const weekdays = ["pondělí", "úterý", "středa", "čtvrtek", "pátek", "sobota", "neděle"] as const;
+const weekdayGenitives = [
+  "pondělí",
+  "úterý",
+  "středy",
+  "čtvrtka",
+  "pátku",
+  "soboty",
+  "neděle",
+] as const;
+const nextWeekdays = weekdays.flatMap((weekday, day) => [
+  { phrase: `příští ${weekday}`, day, canonical: `příští ${weekday}` },
+  {
+    phrase: `příštího ${textAt(weekdayGenitives, day)}`,
+    day,
+    canonical: `příští ${weekday}`,
+  },
+]);
 
 const czechCountWords = [
   ["dva", "dvě", "dvou", "dvěma"],
@@ -508,6 +528,20 @@ const parseBasePeriod = (input: string) => {
     }
   }
 
+  const prefixedRelativeMonth = EffectString.match(
+    /^(minulý|tento|příští) ([a-záčďéěíňóřšťúůýž]+\.?)$/u,
+  )(input);
+  if (Option.isSome(prefixedRelativeMonth)) {
+    const month = monthNumber(textAt(prefixedRelativeMonth.value, 2));
+    if (month !== undefined) {
+      const modifier = textAt(prefixedRelativeMonth.value, 1);
+      const direction = relativeYearDirection(modifier);
+      return Option.some(
+        monthOfRelativeYear(month, direction, `${modifier} ${textAt(months, month - 1)}`),
+      );
+    }
+  }
+
   const relativeMonth = EffectString.match(
     /^([a-záčďéěíňóřšťúůýž]+\.?) (minulého roku|příštího roku|tohoto roku)$/u,
   )(input);
@@ -553,7 +587,11 @@ const parseBasePeriod = (input: string) => {
   }
   if (input === "předminulý víkend") return Option.some(relativeWeekend(-2, input));
   if (input === "přespříští víkend") return Option.some(relativeWeekend(2, input));
-  return Option.none<Period>();
+
+  const weekday = nextWeekdays.find((entry) => entry.phrase === input);
+  return weekday === undefined
+    ? Option.none<Period>()
+    : Option.some(relativeWeekday(weekday.day, 1, weekday.canonical));
 };
 
 // RETURN TYPE: Recursive period offsets require an explicit result type.
@@ -578,7 +616,13 @@ const parsePeriod = (input: string): Option.Option<Period> => {
 
   const edge = EffectString.match(/^(začátek|počátek|konec) (.+)$/u)(input);
   if (Option.isSome(edge)) {
-    const period = parseBasePeriod(textAt(edge.value, 2));
+    const periodText = textAt(edge.value, 2);
+    const basePeriod = parseBasePeriod(periodText);
+    const implicit = units.find((entry) => entry.durationGenitive === periodText);
+    const period =
+      Option.isSome(basePeriod) || implicit === undefined
+        ? basePeriod
+        : Option.some(relativePeriod(implicit.unit, 0, implicit.current));
     if (Option.isSome(period)) {
       const isEnd = textAt(edge.value, 1) === "konec";
       const canonical = `${isEnd ? "konec" : "začátek"} ${period.value.canonical}`;
@@ -750,7 +794,7 @@ const parseCzech = (input: string) => {
       ["od ", " do dneška"],
       ["mezi ", " a dneškem"],
     ],
-    ["od dneška do ", "mezi dneškem a "],
+    ["od dneška do ", "mezi dneškem a ", "dnešek až "],
     parsePeriod,
     (period) => `od ${period} do dneška`,
     (period) => `od dneška do ${period}`,
@@ -785,6 +829,8 @@ const staticPeriodPhrases = [
   "předminulý víkend",
   "přespříští víkend",
   ...periodAliases.flatMap((entry) => [`začátek ${entry[0]}`, `konec ${entry[0]}`]),
+  ...nextWeekdays.map((entry) => entry.phrase),
+  ...months.flatMap((month) => [`minulý ${month}`, `příští ${month}`]),
   ...[1, 2, 3, 4].flatMap((quarter) => [
     `q${quarter}`,
     `q${quarter} tohoto roku`,
@@ -919,6 +965,8 @@ export const CzechContribution = new BaseLanguageContribution({
   locale: "cs",
   vocabulary: [
     ...months,
+    ...weekdays,
+    ...weekdayGenitives,
     ...monthAbbreviations.flatMap((aliases) => aliases),
     ...units.flatMap((entry) => [
       entry.singular,

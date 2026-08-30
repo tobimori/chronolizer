@@ -340,6 +340,19 @@ describe("Dutch date ranges", () => {
   );
 
   it.effect.each([
+    ["nu tot en met volgende donderdag", { gte: "now", lt: "now+1w/w+4d" }],
+    ["volgende oktober", { gte: "now+1y/y+9M", lt: "now+1y/y+10M" }],
+    ["begin van het jaar", { gte: "now/y", lt: "now/y+1d" }],
+    ["begin van de maand drie dagen geleden", { gte: "now/M-3d", lt: "now/M-2d" }],
+  ] as const)(
+    "maps concise Dutch period %s",
+    Effect.fn(function* (testCase) {
+      const [input, filter] = testCase;
+      expect(formatFilter((yield* parseDutch(input)).range)).toEqual(filter);
+    }),
+  );
+
+  it.effect.each([
     ["rest van de maand", "now/M+1M"],
     ["rest van de week", "now/w+1w"],
     ["wat over is van het jaar", "now/y+1y"],
