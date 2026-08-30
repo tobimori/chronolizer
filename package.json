@@ -1,6 +1,6 @@
 {
   "name": "chronolizer",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Bidirectional natural-language date ranges for Effect.",
   "homepage": "https://github.com/tobimori/chronolizer#readme",
   "bugs": "https://github.com/tobimori/chronolizer/issues",

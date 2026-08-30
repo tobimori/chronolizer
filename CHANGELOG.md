@@ -1,5 +1,15 @@
 # chronolizer
 
+## 0.4.0
+
+### Minor Changes
+
+- 881571a: Parse written counts through ninety-nine and apply counted calendar offsets to existing periods in every supported language.
+
+### Patch Changes
+
+- 0714a9f: Use plain language in public errors and package documentation.
+
 ## 0.3.0
 
 ### Minor Changes
