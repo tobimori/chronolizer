@@ -203,11 +203,14 @@ const createRegistry = Effect.fn(function* () {
   });
 
   const resolve: LanguageRegistry.Service["resolve"] = Effect.fn(function* (locale: string) {
+    const cached = (yield* Ref.get(state)).compiledLanguages.get(locale);
+    if (cached !== undefined) return cached;
+
     const canonical = canonicalBaseLocale(locale);
     if (Option.isSome(canonical)) {
       const compiled = yield* Ref.modify(state, (current) => {
-        const cached = current.compiledLanguages.get(canonical.value);
-        if (cached !== undefined) return [Option.some(cached), current] as const;
+        const canonicalCached = current.compiledLanguages.get(canonical.value);
+        if (canonicalCached !== undefined) return [Option.some(canonicalCached), current] as const;
 
         const language = compileLanguage(canonical.value, current.entries);
         if (Option.isNone(language)) return [language, current] as const;

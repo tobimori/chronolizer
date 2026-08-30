@@ -1,47 +1,68 @@
-import { Array as EffectArray, Option, String as EffectString } from "effect";
+import { Option, String as EffectString } from "effect";
 
 import { damerauLevenshteinDistance } from "./correction.ts";
+import type { DamerauLevenshteinWorkspace } from "./correction.ts";
 
-const fuzzyPrefixDistance = (input: string, target: string) => {
-  const lengths = EffectArray.dedupe([
+const completionCost = (
+  input: string,
+  target: string,
+  targetStart: number,
+  targetEnd: number,
+  workspace: DamerauLevenshteinWorkspace,
+) => {
+  const targetLength = targetEnd - targetStart;
+  if (input.length <= targetLength && target.startsWith(input, targetStart)) return 0;
+  if (input.length < 3 || input.charCodeAt(0) !== target.charCodeAt(targetStart)) return undefined;
+
+  const maximum = input.length >= 5 ? 2 : 1;
+  let minimum = maximum + 1;
+  let previousLength = -1;
+  for (const length of [
     Math.max(1, input.length - 1),
     input.length,
-    Math.min(target.length, input.length + 1),
-  ]);
-  return Math.min(
-    ...lengths.map((length) => damerauLevenshteinDistance(input, target.slice(0, length))),
-  );
+    Math.min(targetLength, input.length + 1),
+  ]) {
+    if (length === previousLength) continue;
+    previousLength = length;
+    minimum = Math.min(
+      minimum,
+      damerauLevenshteinDistance(
+        input,
+        target.slice(targetStart, targetStart + length),
+        maximum,
+        workspace,
+      ),
+    );
+  }
+  return minimum <= maximum ? minimum : undefined;
 };
 
-const completionCost = (input: string, target: string) => {
-  if (input === target || target.startsWith(input)) return 0;
-  if (input.length < 3 || input[0] !== target[0]) return undefined;
-  const maximum = input.length >= 5 ? 2 : 1;
-  const distance = fuzzyPrefixDistance(input, target);
-  return distance <= maximum ? distance : undefined;
-};
-
-const phraseScore = (input: string, phrase: string) => {
+const phraseScore = (
+  input: string,
+  inputWords: ReadonlyArray<string>,
+  phrase: string,
+  workspace: DamerauLevenshteinWorkspace,
+) => {
   if (input === phrase) return 0;
   if (phrase.startsWith(input)) return 1;
 
-  const inputWords = input.split(" ");
-  const phraseWords = phrase.split(" ");
-  if (inputWords.length > phraseWords.length) return undefined;
-
   let cost = 0;
   let addedWords = 0;
-  let phraseIndex = 0;
+  let phraseStart = 0;
   for (const inputWord of inputWords) {
-    let wordCost = completionCost(inputWord, phraseWords[phraseIndex] ?? "");
+    let phraseEnd = phrase.indexOf(" ", phraseStart);
+    if (phraseEnd === -1) phraseEnd = phrase.length;
+    let wordCost = completionCost(inputWord, phrase, phraseStart, phraseEnd, workspace);
     while (wordCost === undefined && addedWords < 3) {
-      phraseIndex += 1;
+      phraseStart = phraseEnd + 1;
+      phraseEnd = phrase.indexOf(" ", phraseStart);
+      if (phraseEnd === -1) phraseEnd = phrase.length;
       addedWords += 1;
-      wordCost = completionCost(inputWord, phraseWords[phraseIndex] ?? "");
+      wordCost = completionCost(inputWord, phrase, phraseStart, phraseEnd, workspace);
     }
     if (wordCost === undefined) return undefined;
     cost += wordCost;
-    phraseIndex += 1;
+    phraseStart = phraseEnd + 1;
   }
   return 2 + cost + addedWords;
 };
@@ -86,13 +107,20 @@ export const completeNaturalPhrases = (
 ) => {
   const ranked: Array<{ readonly phrase: string; readonly score: number; readonly index: number }> =
     [];
-  for (const [index, phrase] of EffectArray.dedupe(phrases).entries()) {
-    const score = phraseScore(input, phrase);
+  const inputWords = input.split(" ");
+  const workspace: DamerauLevenshteinWorkspace = [[], [], []];
+  let index = 0;
+  for (const phrase of new Set(phrases)) {
+    const score = phraseScore(input, inputWords, phrase, workspace);
     if (score !== undefined) ranked.push({ phrase, score, index });
+    index += 1;
   }
-  const sorted = ranked.sort((left, right) => left.score - right.score || left.index - right.index);
-  const matches = sorted.some((entry) => entry.score <= 1)
-    ? sorted.filter((entry) => entry.score <= 1)
-    : sorted;
-  return matches.slice(0, limit).map((entry) => entry.phrase);
+  ranked.sort((left, right) => left.score - right.score || left.index - right.index);
+  const maximumScore = (ranked[0]?.score ?? 2) <= 1 ? 1 : Number.POSITIVE_INFINITY;
+  const matches: Array<string> = [];
+  for (const entry of ranked) {
+    if (entry.score > maximumScore || matches.length >= limit) break;
+    matches.push(entry.phrase);
+  }
+  return matches;
 };

@@ -30,6 +30,7 @@
     "access": "public"
   },
   "scripts": {
+    "benchmark": "pnpm build && node tools/benchmark.mjs",
     "build": "vp pack",
     "check:bundle-size": "node tools/check-bundle-size.mjs",
     "check:tree-shaking": "node tools/check-tree-shaking.mjs",

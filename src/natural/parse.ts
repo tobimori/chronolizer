@@ -14,10 +14,12 @@ export interface ParseNaturalOptions {
 }
 
 const distinctCandidates = (candidates: EffectArray.NonEmptyReadonlyArray<NaturalCandidate>) =>
-  EffectArray.dedupeWith(
-    candidates,
-    (left, right) => rangeKey(left.range) === rangeKey(right.range),
-  );
+  candidates.length === 1
+    ? candidates
+    : EffectArray.dedupeWith(
+        candidates,
+        (left, right) => rangeKey(left.range) === rangeKey(right.range),
+      );
 
 const parseQuality = (hasAlternatives: boolean, hasCorrections: boolean) => {
   if (hasAlternatives) return "ambiguous";

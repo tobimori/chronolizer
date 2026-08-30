@@ -1,47 +1,81 @@
-import { Option, String as EffectString } from "effect";
-
 import { Correction, NaturalCorrectionCandidate } from "../language/model.ts";
 import { naturalWords } from "./text.ts";
 
 interface PartialCorrection {
-  readonly words: ReadonlyArray<string>;
+  readonly text: string;
   readonly corrections: ReadonlyArray<Correction>;
   readonly cost: number;
   readonly offset: number;
 }
 
-const isProtectedValue = (word: string) =>
-  Option.isSome(EffectString.match(/^\d+$/u)(word)) ||
-  Option.isSome(EffectString.match(/^\d{4}-\d{2}-\d{2}$/u)(word));
+const isProtectedValue = (word: string) => /^(?:\d+|\d{4}-\d{2}-\d{2})$/u.test(word);
 
-export const damerauLevenshteinDistance = (left: string, right: string) => {
-  const fallback = left.length + right.length;
-  let previousPrevious: ReadonlyArray<number> | undefined;
-  let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+export type DamerauLevenshteinWorkspace = readonly [
+  first: Array<number>,
+  second: Array<number>,
+  third: Array<number>,
+];
+
+export const damerauLevenshteinDistance = (
+  left: string,
+  right: string,
+  maximum: number = Math.max(left.length, right.length),
+  workspace: DamerauLevenshteinWorkspace = [[], [], []],
+) => {
+  const outside = maximum + 1;
+  if (Math.abs(left.length - right.length) > maximum) return outside;
+
+  const width = right.length + 1;
+  let [previousPrevious, previous, current] = workspace;
+  for (const row of workspace) {
+    row.length = width;
+    row.fill(outside);
+  }
+  for (let column = 0; column <= Math.min(right.length, maximum); column += 1) {
+    previous[column] = column;
+  }
 
   for (let row = 1; row <= left.length; row += 1) {
-    const current = [row];
-    for (let column = 1; column <= right.length; column += 1) {
-      const substitution = left.charAt(row - 1) === right.charAt(column - 1) ? 0 : 1;
-      const distance = Math.min(
-        (previous[column] ?? fallback) + 1,
-        (current[column - 1] ?? fallback) + 1,
-        (previous[column - 1] ?? fallback) + substitution,
+    current.fill(outside);
+    if (row <= maximum) current[0] = row;
+    const firstColumn = Math.max(1, row - maximum);
+    const lastColumn = Math.min(right.length, row + maximum);
+    let rowMinimum = row <= maximum ? row : outside;
+    for (let column = firstColumn; column <= lastColumn; column += 1) {
+      const substitution = left.charCodeAt(row - 1) === right.charCodeAt(column - 1) ? 0 : 1;
+      let distance = Math.min(
+        (previous[column] ?? outside) + 1,
+        (current[column - 1] ?? outside) + 1,
+        (previous[column - 1] ?? outside) + substitution,
       );
-      const transposed =
-        previousPrevious !== undefined &&
+      if (
         row > 1 &&
         column > 1 &&
-        left.charAt(row - 1) === right.charAt(column - 2) &&
-        left.charAt(row - 2) === right.charAt(column - 1)
-          ? (previousPrevious[column - 2] ?? fallback) + 1
-          : fallback;
-      current.push(Math.min(distance, transposed));
+        left.charCodeAt(row - 1) === right.charCodeAt(column - 2) &&
+        left.charCodeAt(row - 2) === right.charCodeAt(column - 1)
+      ) {
+        distance = Math.min(distance, (previousPrevious[column - 2] ?? outside) + 1);
+      }
+      current[column] = distance;
+      rowMinimum = Math.min(rowMinimum, distance);
     }
+    if (rowMinimum > maximum) return outside;
+    const reusable = previousPrevious;
     previousPrevious = previous;
     previous = current;
+    current = reusable;
   }
-  return previous[right.length] ?? fallback;
+  return previous[right.length] ?? outside;
+};
+
+export const damerauLevenshteinDistanceWithin = (
+  left: string,
+  right: string,
+  maximum: number,
+  workspace?: DamerauLevenshteinWorkspace,
+) => {
+  const distance = damerauLevenshteinDistance(left, right, maximum, workspace);
+  return distance <= maximum ? distance : undefined;
 };
 
 const segmentedReplacements = (word: string, vocabulary: ReadonlySet<string>) => {
@@ -72,28 +106,45 @@ const segmentedReplacements = (word: string, vocabulary: ReadonlySet<string>) =>
     .map((parts) => ({ word: parts.join(" "), distance: parts.length - 1 }));
 };
 
+const vocabularySets = new WeakMap<ReadonlyArray<string>, ReadonlySet<string>>();
+
+const vocabularySet = (vocabulary: ReadonlyArray<string>) => {
+  const cached = vocabularySets.get(vocabulary);
+  if (cached !== undefined) return cached;
+  const words = new Set(vocabulary);
+  vocabularySets.set(vocabulary, words);
+  return words;
+};
+
 const replacementsFor = (
   word: string,
-  vocabulary: ReadonlyArray<string>,
+  vocabulary: ReadonlySet<string>,
   segmentationVocabulary: ReadonlySet<string>,
+  workspace: DamerauLevenshteinWorkspace,
 ) => {
-  if (vocabulary.includes(word) || isProtectedValue(word)) return [{ word, distance: 0 }];
+  if (vocabulary.has(word) || isProtectedValue(word)) return [{ word, distance: 0 }];
 
   const segmented = segmentedReplacements(word, segmentationVocabulary);
   if (word.length <= 3) return segmented;
 
   const maximum = word.length >= 6 ? 2 : 1;
-  const fuzzy = vocabulary
-    .filter((candidate) => Math.abs(candidate.length - word.length) <= maximum)
-    .map((candidate) => ({
-      word: candidate,
-      distance: damerauLevenshteinDistance(word, candidate),
-    }))
-    .filter((candidate) => candidate.distance <= maximum);
-  const matches = [...segmented, ...fuzzy];
-  if (matches.length === 0) return [];
-  const minimum = Math.min(...matches.map((candidate) => candidate.distance));
-  return matches.filter((candidate) => candidate.distance === minimum).slice(0, 4);
+  let minimum = Number.POSITIVE_INFINITY;
+  const matches: Array<{ readonly word: string; readonly distance: number }> = [];
+  const addMatch = (replacement: string, distance: number) => {
+    if (distance > minimum) return;
+    if (distance < minimum) {
+      minimum = distance;
+      matches.length = 0;
+    }
+    if (matches.length < 4) matches.push({ word: replacement, distance });
+  };
+  for (const replacement of segmented) addMatch(replacement.word, replacement.distance);
+  for (const candidate of vocabulary) {
+    if (Math.abs(candidate.length - word.length) > maximum) continue;
+    const distance = damerauLevenshteinDistance(word, candidate, maximum, workspace);
+    if (distance <= maximum) addMatch(candidate, distance);
+  }
+  return matches;
 };
 
 const emptySegmentationVocabulary: ReadonlySet<string> = new Set();
@@ -104,12 +155,19 @@ export const correctWhitespaceSeparatedText = (
   segmentationVocabulary: ReadonlySet<string> = emptySegmentationVocabulary,
 ) => {
   const words = naturalWords(input);
+  const wordsInVocabulary = vocabularySet(vocabulary);
+  const workspace: DamerauLevenshteinWorkspace = [[], [], []];
   let partials: ReadonlyArray<PartialCorrection> = [
-    { words: [], corrections: [], cost: 0, offset: 0 },
+    { text: "", corrections: [], cost: 0, offset: 0 },
   ];
 
   for (const word of words) {
-    const replacements = replacementsFor(word, vocabulary, segmentationVocabulary);
+    const replacements = replacementsFor(
+      word,
+      wordsInVocabulary,
+      segmentationVocabulary,
+      workspace,
+    );
     if (replacements.length === 0) return [];
     const next: Array<PartialCorrection> = [];
     for (const partial of partials) {
@@ -127,7 +185,8 @@ export const correctWhitespaceSeparatedText = (
                 }),
               ];
         next.push({
-          words: [...partial.words, replacement.word],
+          text:
+            partial.text.length === 0 ? replacement.word : `${partial.text} ${replacement.word}`,
           corrections: correction,
           cost: partial.cost + replacement.distance,
           offset: partial.offset + word.length + 1,
@@ -141,7 +200,7 @@ export const correctWhitespaceSeparatedText = (
     .filter((partial) => partial.corrections.length > 0)
     .map((partial) =>
       NaturalCorrectionCandidate.make({
-        text: partial.words.join(" "),
+        text: partial.text,
         corrections: partial.corrections,
         cost: partial.cost,
       }),

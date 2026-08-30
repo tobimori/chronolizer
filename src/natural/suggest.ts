@@ -50,11 +50,15 @@ export const suggestNatural = Effect.fn("chronolizer.suggestNatural")(function* 
         NaturalSuggestion.make({ text: candidate.canonical, range: candidate.range }),
       ),
     );
-  const distinct = (suggestions: ReadonlyArray<NaturalSuggestion>) =>
-    EffectArray.dedupeWith(
-      suggestions,
-      (left, right) => rangeKey(left.range) === rangeKey(right.range),
-    );
+  const distinct = (suggestions: ReadonlyArray<NaturalSuggestion>) => {
+    const keys = new Set<string>();
+    return suggestions.filter((suggestion) => {
+      const key = rangeKey(suggestion.range);
+      if (keys.has(key)) return false;
+      keys.add(key);
+      return true;
+    });
+  };
 
   const suggested = distinct(
     suggestionsFrom([...language.suggest(normalized, limit * 2), normalized]),
