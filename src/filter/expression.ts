@@ -33,33 +33,41 @@ const failAt = (input: string, offset: number, expected: string) =>
 const isDigit = (value: string) => value >= "0" && value <= "9";
 const isFirstPositiveDigit = (value: string) => value >= "1" && value <= "9";
 
-export const parseInstantExpression = Effect.fn(function* (input: string) {
-  let cursor = 0;
-  let expression: InstantExpr;
-  let fixedAnchor = false;
+interface ParsedAnchor {
+  readonly expression: InstantExpr;
+  readonly cursor: number;
+  readonly fixed: boolean;
+}
 
+const parseAnchor = Effect.fn(function* (input: string) {
   if (input.startsWith("now")) {
-    expression = now();
-    cursor = 3;
-  } else {
-    const candidate = input.slice(0, 10);
-    if (!isIsoDate(candidate)) {
-      return yield* failAt(input, 0, '"now" or an ISO date (YYYY-MM-DD)');
-    }
-    expression = dateLiteral(candidate);
-    cursor = 10;
-    fixedAnchor = true;
+    const expression: InstantExpr = now();
+    return { expression, cursor: 3, fixed: false } satisfies ParsedAnchor;
   }
+  const candidate = input.slice(0, 10);
+  if (!isIsoDate(candidate)) {
+    return yield* failAt(input, 0, '"now" or an ISO date (YYYY-MM-DD)');
+  }
+  const expression: InstantExpr = dateLiteral(candidate);
+  return { expression, cursor: 10, fixed: true } satisfies ParsedAnchor;
+});
 
-  if (fixedAnchor && cursor < input.length) {
-    if (input.slice(cursor, cursor + 2) !== "||") {
-      return yield* failAt(input, cursor, '"||" before date operations');
-    }
-    cursor += 2;
-    if (cursor === input.length) {
-      return yield* failAt(input, cursor, 'an operation beginning with "+", "-", or "/"');
-    }
+const operationStart = Effect.fn(function* (input: string, anchor: ParsedAnchor) {
+  if (!anchor.fixed || anchor.cursor === input.length) return anchor.cursor;
+  if (input.slice(anchor.cursor, anchor.cursor + 2) !== "||") {
+    return yield* failAt(input, anchor.cursor, '"||" before date operations');
   }
+  const cursor = anchor.cursor + 2;
+  if (cursor === input.length) {
+    return yield* failAt(input, cursor, 'an operation beginning with "+", "-", or "/"');
+  }
+  return cursor;
+});
+
+export const parseInstantExpression = Effect.fn(function* (input: string) {
+  const anchor = yield* parseAnchor(input);
+  let expression: InstantExpr = anchor.expression;
+  let cursor = yield* operationStart(input, anchor);
 
   while (cursor < input.length) {
     const operator = input[cursor];

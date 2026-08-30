@@ -309,15 +309,13 @@ const parseNamedDate = (input: string) => {
       );
 };
 
-const parseBasePeriod = (input: string) => {
-  const absoluteDate = absoluteDatePeriod(input, "en");
-  if (Option.isSome(absoluteDate)) return absoluteDate;
-
-  const namedDate = parseNamedDate(input);
-  if (Option.isSome(namedDate)) return namedDate;
-
-  const quarter = parseQuarter(input);
-  if (Option.isSome(quarter)) return quarter;
+const parseDatedPeriod = (input: string) => {
+  const knownPeriod = Option.firstSomeOf([
+    absoluteDatePeriod(input, "en"),
+    parseNamedDate(input),
+    parseQuarter(input),
+  ]);
+  if (Option.isSome(knownPeriod)) return knownPeriod;
 
   const yearMatch = EffectString.match(/^(?:(?:the )?(?:calendar )?year )?(\d{4})$/u)(input);
   if (Option.isSome(yearMatch)) {
@@ -336,6 +334,10 @@ const parseBasePeriod = (input: string) => {
     }
   }
 
+  return Option.none<Period>();
+};
+
+const parseRelativeMonth = (input: string) => {
   const prefixedRelativeMonth = EffectString.match(/^(last|this|next) ([a-z]+\.?)$/u)(input);
   if (Option.isSome(prefixedRelativeMonth)) {
     const directionText = textAt(prefixedRelativeMonth.value, 1);
@@ -374,34 +376,10 @@ const parseBasePeriod = (input: string) => {
     );
   }
 
-  if (input === "today") return Option.some(relativePeriod("day", 0, "today"));
-  if (input === "yesterday") {
-    return Option.some(relativePeriod("day", -1, "yesterday"));
-  }
-  if (input === "tomorrow") {
-    return Option.some(relativePeriod("day", 1, "tomorrow"));
-  }
-  if (input === "weekend" || input === "the weekend" || input === "this weekend") {
-    return Option.some(relativeWeekend(0, "this weekend"));
-  }
-  if (input === "last weekend" || input === "previous weekend") {
-    return Option.some(relativeWeekend(-1, "last weekend"));
-  }
-  if (input === "next weekend" || input === "coming weekend") {
-    return Option.some(relativeWeekend(1, "next weekend"));
-  }
-  if (input === "the weekend before last") {
-    return Option.some(relativeWeekend(-2, "the weekend before last"));
-  }
-  if (input === "the weekend after next") {
-    return Option.some(relativeWeekend(2, "the weekend after next"));
-  }
+  return Option.none<Period>();
+};
 
-  const weekday = nextWeekdayPhrases.indexOf(input);
-  if (weekday !== -1) {
-    return Option.some(relativeWeekday(weekday, 1, `next ${title(textAt(weekdays, weekday))}`));
-  }
-
+const parseRelativeUnit = (input: string) => {
   const articlePeriod = EffectString.match(/^the (day|week|month|quarter|year)$/u)(input);
   if (Option.isSome(articlePeriod)) {
     const entry = units.find((unit) => unit[0] === textAt(articlePeriod.value, 1));
@@ -435,6 +413,62 @@ const parseBasePeriod = (input: string) => {
   }
 
   return Option.none<Period>();
+};
+
+const parseBasePeriod = (input: string) => {
+  const knownPeriod = Option.firstSomeOf([parseDatedPeriod(input), parseRelativeMonth(input)]);
+  if (Option.isSome(knownPeriod)) return knownPeriod;
+
+  if (input === "today") return Option.some(relativePeriod("day", 0, "today"));
+  if (input === "yesterday") {
+    return Option.some(relativePeriod("day", -1, "yesterday"));
+  }
+  if (input === "tomorrow") {
+    return Option.some(relativePeriod("day", 1, "tomorrow"));
+  }
+  if (input === "weekend" || input === "the weekend" || input === "this weekend") {
+    return Option.some(relativeWeekend(0, "this weekend"));
+  }
+  if (input === "last weekend" || input === "previous weekend") {
+    return Option.some(relativeWeekend(-1, "last weekend"));
+  }
+  if (input === "next weekend" || input === "coming weekend") {
+    return Option.some(relativeWeekend(1, "next weekend"));
+  }
+  if (input === "the weekend before last") {
+    return Option.some(relativeWeekend(-2, "the weekend before last"));
+  }
+  if (input === "the weekend after next") {
+    return Option.some(relativeWeekend(2, "the weekend after next"));
+  }
+
+  const weekday = nextWeekdayPhrases.indexOf(input);
+  if (weekday !== -1) {
+    return Option.some(relativeWeekday(weekday, 1, `next ${title(textAt(weekdays, weekday))}`));
+  }
+
+  return parseRelativeUnit(input);
+};
+
+const parsePeriodEdge = (input: string) => {
+  const edge = EffectString.match(/^(?:the )?(start|beginning|end) of (.+)$/u)(input);
+  if (Option.isNone(edge)) return Option.none<Period>();
+  const periodText = textAt(edge.value, 2);
+  const basePeriod = parseBasePeriod(periodText);
+  const implicit = units.find((entry) => entry[0] === periodText);
+  const period =
+    Option.isSome(basePeriod) || implicit === undefined
+      ? basePeriod
+      : Option.some(relativePeriod(implicit[1], 0, currentPeriod(implicit[0])));
+  if (Option.isNone(period)) return Option.none<Period>();
+  const edgeName = textAt(edge.value, 1);
+  const name = edgeName === "beginning" ? "start" : edgeName;
+  const canonical = `${name} of ${period.value.canonical}`;
+  return Option.some(
+    name === "end"
+      ? periodEndDay(period.value, canonical)
+      : periodStartDay(period.value, canonical),
+  );
 };
 
 // RETURN TYPE: Recursive period offsets require an explicit result type.
@@ -485,31 +519,14 @@ const parsePeriod = (input: string): Option.Option<Period> => {
     }
   }
 
-  const edge = EffectString.match(/^(?:the )?(start|beginning|end) of (.+)$/u)(input);
-  if (Option.isSome(edge)) {
-    const periodText = textAt(edge.value, 2);
-    const basePeriod = parseBasePeriod(periodText);
-    const implicit = units.find((entry) => entry[0] === periodText);
-    const period =
-      Option.isSome(basePeriod) || implicit === undefined
-        ? basePeriod
-        : Option.some(relativePeriod(implicit[1], 0, currentPeriod(implicit[0])));
-    if (Option.isSome(period)) {
-      const edgeName = textAt(edge.value, 1);
-      const name = edgeName === "beginning" ? "start" : edgeName;
-      const canonical = `${name} of ${period.value.canonical}`;
-      return Option.some(
-        name === "end"
-          ? periodEndDay(period.value, canonical)
-          : periodStartDay(period.value, canonical),
-      );
-    }
-  }
   const wrapper = ["during ", "in ", "for ", "all of ", "the whole of "].find((prefix) =>
     input.startsWith(prefix),
   );
-  const base = parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
-  return Option.isSome(base) ? base : parseCalendarOffset(input);
+  return Option.firstSomeOf([
+    parsePeriodEdge(input),
+    parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length)),
+    parseCalendarOffset(input),
+  ]);
 };
 
 const boundaryCandidate = (input: string) =>

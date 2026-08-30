@@ -501,15 +501,13 @@ const parseQuarter = (input: string) => {
     : Option.some(quarterOfRelativeYear(quarter, 0, `Q${quarter}`));
 };
 
-const parseBasePeriod = (input: string) => {
-  const absoluteDate = absoluteDatePeriod(input, "de");
-  if (Option.isSome(absoluteDate)) return absoluteDate;
-
-  const namedDate = parseNamedDate(input);
-  if (Option.isSome(namedDate)) return namedDate;
-
-  const quarter = parseQuarter(input);
-  if (Option.isSome(quarter)) return quarter;
+const parseDatedPeriod = (input: string) => {
+  const knownPeriod = Option.firstSomeOf([
+    absoluteDatePeriod(input, "de"),
+    parseNamedDate(input),
+    parseQuarter(input),
+  ]);
+  if (Option.isSome(knownPeriod)) return knownPeriod;
 
   const yearMatch = EffectString.match(/^(?:(?:das )?(?:kalender)?jahr )?(\d{4})$/u)(input);
   if (Option.isSome(yearMatch)) {
@@ -528,6 +526,10 @@ const parseBasePeriod = (input: string) => {
     }
   }
 
+  return Option.none<Period>();
+};
+
+const parseRelativeMonth = (input: string) => {
   const prefixedRelativeMonth = EffectString.match(/^(letzter|dieser|nächster) ([a-zäöüß]+\.?)$/u)(
     input,
   );
@@ -566,6 +568,13 @@ const parseBasePeriod = (input: string) => {
       monthOfRelativeYear(standaloneMonth, 0, title(textAt(months, standaloneMonth - 1))),
     );
   }
+
+  return Option.none<Period>();
+};
+
+const parseBasePeriod = (input: string) => {
+  const knownPeriod = Option.firstSomeOf([parseDatedPeriod(input), parseRelativeMonth(input)]);
+  if (Option.isSome(knownPeriod)) return knownPeriod;
 
   if (input === "wochenende" || input === "dieses wochenende" || input === "am wochenende") {
     return Option.some(relativeWeekend(0, "dieses Wochenende"));

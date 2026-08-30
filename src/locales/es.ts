@@ -472,13 +472,13 @@ const parseQuarter = (input: string) => {
     : Option.some(quarterOfRelativeYear(quarter, 0, `T${quarter}`));
 };
 
-const parseBasePeriod = (input: string) => {
-  const absoluteDate = absoluteDatePeriod(input, "es");
-  if (Option.isSome(absoluteDate)) return absoluteDate;
-  const namedDate = parseNamedDate(input);
-  if (Option.isSome(namedDate)) return namedDate;
-  const quarter = parseQuarter(input);
-  if (Option.isSome(quarter)) return quarter;
+const parseDatedPeriod = (input: string) => {
+  const knownPeriod = Option.firstSomeOf([
+    absoluteDatePeriod(input, "es"),
+    parseNamedDate(input),
+    parseQuarter(input),
+  ]);
+  if (Option.isSome(knownPeriod)) return knownPeriod;
 
   const yearMatch = EffectString.match(/^(?:(?:el )?año )?(\d{4})$/u)(input);
   if (Option.isSome(yearMatch)) {
@@ -494,6 +494,13 @@ const parseBasePeriod = (input: string) => {
       return Option.some(fixedMonthPeriod(year, month, `${textAt(months, month - 1)} de ${year}`));
     }
   }
+
+  return Option.none<Period>();
+};
+
+const parseBasePeriod = (input: string) => {
+  const datedPeriod = parseDatedPeriod(input);
+  if (Option.isSome(datedPeriod)) return datedPeriod;
 
   const prefixedRelativeMonth = EffectString.match(
     /^(pasado|próximo|proximo|este) ([a-záéíóúñ]+\.?)$/u,
@@ -684,7 +691,7 @@ const rollingCandidate = (entry: UnitForms, amount: number, future: boolean) =>
     rollingCanonical(entry, amount, future),
   );
 
-const parseRollingPeriod = (input: string) => {
+const parseRollingSince = (input: string) => {
   const since = EffectString.match(
     /^desde hace ([1-9]\d*|un|una) (día|dia|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
   )(input);
@@ -703,6 +710,10 @@ const parseRollingPeriod = (input: string) => {
     }
   }
 
+  return Option.none<ReturnType<typeof candidate>>();
+};
+
+const parseSingularRolling = (input: string) => {
   const futureSingular = EffectString.match(
     /^desde ahora durante (un|una) (día|dia|semana|mes|trimestre|año|ano)$/u,
   )(input);
@@ -746,6 +757,10 @@ const parseRollingPeriod = (input: string) => {
     }
   }
 
+  return Option.none<ReturnType<typeof candidate>>();
+};
+
+const parseCountedRolling = (input: string) => {
   const counted = EffectString.match(
     /^(?:(?:durante|en) )?(?:(los|las) )?(últimos|ultimos|últimas|ultimas|pasados|pasadas|anteriores|próximos|proximos|próximas|proximas|siguientes) ([1-9]\d*) (día|dia|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
   )(input);
@@ -777,6 +792,13 @@ const parseRollingPeriod = (input: string) => {
     ? Option.none<ReturnType<typeof candidate>>()
     : Option.some(rollingCandidate(entry, amount.value, false));
 };
+
+const parseRollingPeriod = (input: string) =>
+  Option.firstSomeOf([
+    parseRollingSince(input),
+    parseSingularRolling(input),
+    parseCountedRolling(input),
+  ]);
 
 const parseElidedDateRange = (input: string) => {
   const joined = EffectString.match(

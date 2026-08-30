@@ -506,13 +506,13 @@ const parseQuarter = (input: string) => {
     : Option.some(quarterOfRelativeYear(quarter, 0, `T${quarter}`));
 };
 
-const parseBasePeriod = (input: string) => {
-  const absoluteDate = absoluteDatePeriod(input, "fr");
-  if (Option.isSome(absoluteDate)) return absoluteDate;
-  const namedDate = parseNamedDate(input);
-  if (Option.isSome(namedDate)) return namedDate;
-  const quarter = parseQuarter(input);
-  if (Option.isSome(quarter)) return quarter;
+const parseDatedPeriod = (input: string) => {
+  const knownPeriod = Option.firstSomeOf([
+    absoluteDatePeriod(input, "fr"),
+    parseNamedDate(input),
+    parseQuarter(input),
+  ]);
+  if (Option.isSome(knownPeriod)) return knownPeriod;
 
   const yearMatch = EffectString.match(/^(?:(?:l')?année |annee )?(\d{4})$/u)(input);
   if (Option.isSome(yearMatch)) {
@@ -528,6 +528,13 @@ const parseBasePeriod = (input: string) => {
       return Option.some(fixedMonthPeriod(year, month, `${textAt(months, month - 1)} ${year}`));
     }
   }
+
+  return Option.none<Period>();
+};
+
+const parseBasePeriod = (input: string) => {
+  const datedPeriod = parseDatedPeriod(input);
+  if (Option.isSome(datedPeriod)) return datedPeriod;
 
   const suffixedRelativeMonth = EffectString.match(
     /^([a-zàâçéèêëîïôûùüÿœ]+\.?) (dernier|prochain)$/u,

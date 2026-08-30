@@ -381,13 +381,13 @@ const parseQuarter = (input: string) => {
     : Option.some(quarterOfRelativeYear(quarter, 0, `Ç${quarter}`));
 };
 
-const parseBasePeriod = (input: string) => {
-  const absoluteDate = absoluteDatePeriod(input, "tr");
-  if (Option.isSome(absoluteDate)) return absoluteDate;
-  const namedDate = parseNamedDate(input);
-  if (Option.isSome(namedDate)) return namedDate;
-  const quarter = parseQuarter(input);
-  if (Option.isSome(quarter)) return quarter;
+const parseDatedPeriod = (input: string) => {
+  const knownPeriod = Option.firstSomeOf([
+    absoluteDatePeriod(input, "tr"),
+    parseNamedDate(input),
+    parseQuarter(input),
+  ]);
+  if (Option.isSome(knownPeriod)) return knownPeriod;
 
   const yearMatch = EffectString.match(/^(?:yıl |yılı )?(\d{4})$/u)(input);
   if (Option.isSome(yearMatch)) {
@@ -405,6 +405,13 @@ const parseBasePeriod = (input: string) => {
       );
     }
   }
+
+  return Option.none<Period>();
+};
+
+const parseBasePeriod = (input: string) => {
+  const datedPeriod = parseDatedPeriod(input);
+  if (Option.isSome(datedPeriod)) return datedPeriod;
 
   const prefixedRelativeMonth = EffectString.match(/^(geçen|bu|gelecek) ([a-zçğıöşü]+\.?)$/u)(
     input,
@@ -476,6 +483,25 @@ const parseBasePeriod = (input: string) => {
     : Option.some(relativeWeekday(weekday, 1, nextWeekdayPhrases[weekday] ?? input));
 };
 
+const parsePeriodEdge = (input: string) => {
+  const edge = EffectString.match(/^(.+?)(?:ın|in|un|ün) (başı|başlangıcı|sonu)$/u)(input);
+  if (Option.isNone(edge)) return Option.none<Period>();
+  const periodText = textAt(edge.value, 1);
+  const basePeriod = parseBasePeriod(periodText);
+  const implicitUnit = unitAliases.find((entry) => entry[0] === periodText)?.[1];
+  const implicit = units.find((entry) => entry.unit === implicitUnit);
+  const period =
+    Option.isSome(basePeriod) || implicit === undefined
+      ? basePeriod
+      : Option.some(relativePeriod(implicit.unit, 0, implicit.current));
+  if (Option.isNone(period)) return Option.none<Period>();
+  const isEnd = textAt(edge.value, 2) === "sonu";
+  const canonical = `${period.value.canonical} ${isEnd ? "sonu" : "başı"}`;
+  return Option.some(
+    isEnd ? periodEndDay(period.value, canonical) : periodStartDay(period.value, canonical),
+  );
+};
+
 // RETURN TYPE: Recursive period offsets require an explicit result type.
 const parsePeriod = (input: string): Option.Option<Period> => {
   const prefix = EffectString.match(
@@ -502,27 +528,12 @@ const parsePeriod = (input: string): Option.Option<Period> => {
     }
   }
 
-  const edge = EffectString.match(/^(.+?)(?:ın|in|un|ün) (başı|başlangıcı|sonu)$/u)(input);
-  if (Option.isSome(edge)) {
-    const periodText = textAt(edge.value, 1);
-    const basePeriod = parseBasePeriod(periodText);
-    const implicitUnit = unitAliases.find((entry) => entry[0] === periodText)?.[1];
-    const implicit = units.find((entry) => entry.unit === implicitUnit);
-    const period =
-      Option.isSome(basePeriod) || implicit === undefined
-        ? basePeriod
-        : Option.some(relativePeriod(implicit.unit, 0, implicit.current));
-    if (Option.isSome(period)) {
-      const isEnd = textAt(edge.value, 2) === "sonu";
-      const canonical = `${period.value.canonical} ${isEnd ? "sonu" : "başı"}`;
-      return Option.some(
-        isEnd ? periodEndDay(period.value, canonical) : periodStartDay(period.value, canonical),
-      );
-    }
-  }
   const wrapper = ["boyunca ", "içinde ", "tüm "].find((prefix) => input.startsWith(prefix));
-  const base = parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length));
-  return Option.isSome(base) ? base : parseCalendarOffset(input);
+  return Option.firstSomeOf([
+    parsePeriodEdge(input),
+    parseBasePeriod(wrapper === undefined ? input : input.slice(wrapper.length)),
+    parseCalendarOffset(input),
+  ]);
 };
 
 const countedUnit = (value: string) => unitAliases.find((entry) => entry[0] === value)?.[1];
