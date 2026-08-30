@@ -226,6 +226,40 @@ describe("extensible written counts and period offsets", () => {
     }),
   );
 
+  it.effect.each([
+    ["en", "now next thursday", "from now to next Thursday"],
+    ["de", "jetzt nächsten donnerstag", "von heute bis nächster Donnerstag"],
+    ["fr", "maintenant jeudi prochain", "de maintenant à jeudi prochain"],
+    ["cs", "od dneška příštího čtvrtka", "od dneška do příští čtvrtek"],
+    ["pl", "od dziś następnego czwartku", "od dziś do następny czwartek"],
+    ["es", "ahora el próximo jueves", "desde ahora hasta el próximo jueves"],
+    ["nl", "nu tot en volgende donderdag", "vanaf nu tot en met volgende donderdag"],
+    ["tr", "şimdi gelecek perşembe arası", "bugün ile gelecek perşembe arası"],
+  ] as const)(
+    "inserts a missing completion word in $locale",
+    Effect.fn(function* ([locale, input, expected]) {
+      const suggestions = yield* suggestNatural(input, { locale, limit: 1 }).pipe(
+        Effect.provide(LanguagesLayer),
+      );
+      expect(suggestions.map((suggestion) => suggestion.text)).toEqual([expected]);
+    }),
+  );
+
+  it.effect.each([
+    ["now to next thursday", "from now to next Thursday"],
+    ["start year", "start of this year"],
+    ["three days before start month", "3 days before start of month"],
+    ["last week to", "from last week to today"],
+  ] as const)(
+    "completes non-canonical English input %j",
+    Effect.fn(function* ([input, expected]) {
+      const suggestions = yield* suggestNatural(input, { locale: "en", limit: 1 }).pipe(
+        Effect.provide(LanguagesLayer),
+      );
+      expect(suggestions.map((suggestion) => suggestion.text)).toEqual([expected]);
+    }),
+  );
+
   it.effect(
     "composes more than one period offset",
     Effect.fn(function* () {

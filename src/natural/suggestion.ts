@@ -30,14 +30,20 @@ const phraseScore = (input: string, phrase: string) => {
   if (inputWords.length > phraseWords.length) return undefined;
 
   let cost = 0;
-  for (const [index, inputWord] of inputWords.entries()) {
-    const targetWord = phraseWords[index];
-    if (targetWord === undefined) return undefined;
-    const wordCost = completionCost(inputWord, targetWord);
+  let addedWords = 0;
+  let phraseIndex = 0;
+  for (const inputWord of inputWords) {
+    let wordCost = completionCost(inputWord, phraseWords[phraseIndex] ?? "");
+    while (wordCost === undefined && addedWords < 3) {
+      phraseIndex += 1;
+      addedWords += 1;
+      wordCost = completionCost(inputWord, phraseWords[phraseIndex] ?? "");
+    }
     if (wordCost === undefined) return undefined;
     cost += wordCost;
+    phraseIndex += 1;
   }
-  return cost === 0 ? 2 : 2 + cost;
+  return 2 + cost + addedWords;
 };
 
 const completeYearPrefix = (input: string) => {
