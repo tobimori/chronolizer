@@ -76,6 +76,8 @@ const months = [
   "dezember",
 ] as const;
 
+const minimumMonthDays = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
+
 const germanCountWords = [
   "zwei",
   "drei",
@@ -125,13 +127,11 @@ const normalizeGermanCounts = compileCountAliasNormalizer(germanCountAliases);
 const germanCountVocabulary = new Set(countAliasVocabulary(germanCountAliases));
 const correctGerman = (input: string, vocabulary: ReadonlyArray<string>) =>
   correctWhitespaceSeparatedText(input, vocabulary, germanCountVocabulary);
-const normalizeGerman = (input: string, locale: string) =>
-  normalizeGermanCounts(normalizeNaturalText(input, locale));
 
 const monthAbbreviations = [
   ["jan"],
   ["feb"],
-  ["mär", "mrz"],
+  ["mär", "mrz", "maerz"],
   ["apr"],
   ["mai"],
   ["jun"],
@@ -306,76 +306,49 @@ const currentBoundaryPhrases = unitPhrases.flatMap((entry) =>
   ).map(([phrase, boundary]) => ({ boundary, entry, phrase })),
 );
 
-const declinedBoundaryPeriods = [
-  ["diese woche", "week", 0, "dieser woche", "diese woche"],
-  ["letzte woche", "week", -1, "letzter woche", "letzte woche"],
-  ["nächste woche", "week", 1, "nächster woche", "nächste woche"],
-  ["dieser monat", "month", 0, "diesem monat", "diesen monat"],
-  ["letzter monat", "month", -1, "letztem monat", "letzten monat"],
-  ["nächster monat", "month", 1, "nächstem monat", "nächsten monat"],
-  ["dieses quartal", "quarter", 0, "diesem quartal", "dieses quartal"],
-  ["letztes quartal", "quarter", -1, "letztem quartal", "letztes quartal"],
-  ["nächstes quartal", "quarter", 1, "nächstem quartal", "nächstes quartal"],
-  ["dieses jahr", "year", 0, "diesem jahr", "dieses jahr"],
-  ["letztes jahr", "year", -1, "letztem jahr", "letztes jahr"],
-  ["nächstes jahr", "year", 1, "nächstem jahr", "nächstes jahr"],
-] as const satisfies ReadonlyArray<readonly [string, Unit, number, string, string]>;
+const relativeModifierStems = [
+  ["vorletzt", -2],
+  ["übernächst", 2],
+  ["vergangen", -1],
+  ["vorherig", -1],
+  ["letzt", -1],
+  ["heutig", 0],
+  ["dies", 0],
+  ["aktuell", 0],
+  ["laufend", 0],
+  ["nächst", 1],
+  ["kommend", 1],
+  ["folgend", 1],
+] as const;
 
-const relativeAliases = [
-  ...unitPhrases.flatMap((entry) => [
-    [entry.currentGenitive, entry.unit, 0, entry.current] as const,
-    [entry.previousGenitive, entry.unit, -1, entry.previous] as const,
-    [entry.nextGenitive, entry.unit, 1, entry.next] as const,
-  ]),
-  ...declinedBoundaryPeriods.map(
-    ([canonical, unit, direction, dative]) => [dative, unit, direction, canonical] as const,
-  ),
-  ["vorgestern", "day", -2, "vorgestern"],
-  ["vorletzten tag", "day", -2, "vorletzter tag"],
-  ["übernächsten tag", "day", 2, "übernächster tag"],
-  ["vorletzte woche", "week", -2, "vorletzte woche"],
-  ["übernächste woche", "week", 2, "übernächste woche"],
-  ["vorletzten monat", "month", -2, "vorletzter monat"],
-  ["übernächsten monat", "month", 2, "übernächster monat"],
-  ["vorletztes quartal", "quarter", -2, "vorletztes quartal"],
-  ["übernächstes quartal", "quarter", 2, "übernächstes quartal"],
-  ["vorletztes jahr", "year", -2, "vorletztes jahr"],
-  ["übernächstes jahr", "year", 2, "übernächstes jahr"],
-  ["letzten tag", "day", -1, "gestern"],
-  ["vergangenen tag", "day", -1, "gestern"],
-  ["vorherigen tag", "day", -1, "gestern"],
-  ["diesen tag", "day", 0, "heute"],
-  ["heutigen tag", "day", 0, "heute"],
-  ["nächsten tag", "day", 1, "morgen"],
-  ["kommenden tag", "day", 1, "morgen"],
-  ["vergangene woche", "week", -1, "letzte woche"],
-  ["vorherige woche", "week", -1, "letzte woche"],
-  ["aktuelle woche", "week", 0, "diese woche"],
-  ["laufende woche", "week", 0, "diese woche"],
-  ["kommende woche", "week", 1, "nächste woche"],
-  ["folgende woche", "week", 1, "nächste woche"],
-  ["letzten monat", "month", -1, "letzter monat"],
-  ["vergangenen monat", "month", -1, "letzter monat"],
-  ["vorherigen monat", "month", -1, "letzter monat"],
-  ["diesen monat", "month", 0, "dieser monat"],
-  ["aktuellen monat", "month", 0, "dieser monat"],
-  ["laufenden monat", "month", 0, "dieser monat"],
-  ["nächsten monat", "month", 1, "nächster monat"],
-  ["kommenden monat", "month", 1, "nächster monat"],
-  ["folgenden monat", "month", 1, "nächster monat"],
-  ["vergangenes quartal", "quarter", -1, "letztes quartal"],
-  ["vorheriges quartal", "quarter", -1, "letztes quartal"],
-  ["aktuelles quartal", "quarter", 0, "dieses quartal"],
-  ["laufendes quartal", "quarter", 0, "dieses quartal"],
-  ["kommendes quartal", "quarter", 1, "nächstes quartal"],
-  ["folgendes quartal", "quarter", 1, "nächstes quartal"],
-  ["vergangenes jahr", "year", -1, "letztes jahr"],
-  ["vorheriges jahr", "year", -1, "letztes jahr"],
-  ["aktuelles jahr", "year", 0, "dieses jahr"],
-  ["laufendes jahr", "year", 0, "dieses jahr"],
-  ["kommendes jahr", "year", 1, "nächstes jahr"],
-  ["folgendes jahr", "year", 1, "nächstes jahr"],
-] as const satisfies ReadonlyArray<readonly [string, Unit, number, string]>;
+const relativeModifierVocabulary = relativeModifierStems.flatMap(([stem]) =>
+  ["e", "er", "es", "en", "em"].map((ending) => `${stem}${ending}`),
+);
+
+const relativeUnitCanonical = (entry: UnitPhrases, direction: number) => {
+  if (direction === -1) return entry.previous;
+  if (direction === 0) return entry.current;
+  if (direction === 1) return entry.next;
+  return `${direction < 0 ? "vor" : "in"} 2 ${title(entry.dative)}`;
+};
+
+const parseModifiedUnit = (input: string) => {
+  const match = EffectString.match(/^([a-zäöüß]+) ([a-zäöüß]+)$/u)(input);
+  if (Option.isNone(match)) return Option.none<Period>();
+  const modifier = relativeModifierStems.find(([stem]) => textAt(match.value, 1).startsWith(stem));
+  const entry = unitPhrases.find((unit) =>
+    [unit.noun, unit.plural, unit.dative, unit.compound].includes(textAt(match.value, 2)),
+  );
+  return modifier === undefined || entry === undefined
+    ? Option.none<Period>()
+    : Option.some(
+        relativePeriod(
+          entry.unit,
+          modifier[1],
+          canonicalRelative(relativeUnitCanonical(entry, modifier[1])),
+        ),
+      );
+};
 
 const monthNumber = (value: string) => {
   const normalized = value.endsWith(".") ? value.slice(0, -1) : value;
@@ -387,13 +360,41 @@ const monthNumber = (value: string) => {
   return shortIndex === -1 ? undefined : shortIndex + 1;
 };
 
+const normalizeGerman = (input: string, locale: string) => {
+  const normalized = normalizeGermanCounts(normalizeNaturalText(input, locale));
+  if (normalized.endsWith(" auflaufend")) {
+    return `seit ${normalized.slice(0, -" auflaufend".length)}`;
+  }
+  const fullMonth = EffectString.match(
+    /^(?:([a-zäöüß]+\.?) per )?(?:(0?1)\.-)?([0-3]?\d)\.([01]?\d)\.?$/u,
+  )(normalized);
+  if (Option.isNone(fullMonth)) return normalized;
+  const named = textAt(fullMonth.value, 1);
+  const lower = textAt(fullMonth.value, 2);
+  if (named.length === 0 && lower.length === 0) return normalized;
+  const numericMonth = Number(textAt(fullMonth.value, 4));
+  const month = named.length === 0 ? numericMonth : monthNumber(named);
+  return month !== undefined &&
+    month === numericMonth &&
+    Number(textAt(fullMonth.value, 3)) === minimumMonthDays[month - 1]
+    ? textAt(months, month - 1)
+    : normalized;
+};
+
 const currentDateLabel = (day: number, month: number) =>
   `${day}. ${title(textAt(months, month - 1))}`;
 
 const withRelativeCase = (canonical: string, grammaticalCase: "dative" | "accusative") => {
-  const period = declinedBoundaryPeriods.find((entry) => canonical === canonicalRelative(entry[0]));
-  if (period === undefined) return canonical;
-  return canonicalRelative(period[grammaticalCase === "dative" ? 3 : 4]);
+  const separator = canonical.indexOf(" ");
+  if (separator === -1) return canonical;
+  const modifier = canonical.slice(0, separator);
+  if (!relativeModifierStems.some(([stem]) => modifier.startsWith(stem))) return canonical;
+  if (grammaticalCase === "dative") {
+    const declined = modifier.endsWith("e") ? `${modifier}r` : `${modifier.slice(0, -2)}em`;
+    return `${declined}${canonical.slice(separator)}`;
+  }
+  const declined = modifier.endsWith("er") ? `${modifier.slice(0, -2)}en` : modifier;
+  return `${declined}${canonical.slice(separator)}`;
 };
 
 const withRelativeGenitive = (canonical: string) => {
@@ -530,14 +531,14 @@ const parseDatedPeriod = (input: string) => {
 };
 
 const parseRelativeMonth = (input: string) => {
-  const prefixedRelativeMonth = EffectString.match(/^(letzter|dieser|nächster) ([a-zäöüß]+\.?)$/u)(
-    input,
-  );
+  const prefixedRelativeMonth = EffectString.match(
+    /^(letzt|dies|nächst)(?:er|en|em) ([a-zäöüß]+\.?)$/u,
+  )(input);
   if (Option.isSome(prefixedRelativeMonth)) {
     const month = monthNumber(textAt(prefixedRelativeMonth.value, 2));
     if (month !== undefined) {
-      const modifier = textAt(prefixedRelativeMonth.value, 1);
-      const direction = relativeDirection(modifier);
+      const direction = relativeDirection(textAt(prefixedRelativeMonth.value, 1));
+      const modifier = textAt(["letzter", "dieser", "nächster"], direction + 1);
       return Option.some(
         monthOfRelativeYear(month, direction, `${modifier} ${title(textAt(months, month - 1))}`),
       );
@@ -607,12 +608,11 @@ const parseBasePeriod = (input: string) => {
     return Option.some(relativePeriod(relative.unit, direction, canonicalRelative(input)));
   }
 
-  const alias = relativeAliases.find((entry) => entry[0] === input);
-  if (alias !== undefined) {
-    return Option.some(relativePeriod(alias[1], alias[2], canonicalRelative(alias[3])));
+  if (input === "vorgestern") {
+    return Option.some(relativePeriod("day", -2, "vorgestern"));
   }
 
-  return Option.none<Period>();
+  return parseModifiedUnit(input);
 };
 
 interface CalendarOffset {
@@ -861,6 +861,44 @@ const parseElidedDateRange = (input: string) => {
   );
 };
 
+const boundedJoins = [
+  ["von ", " bis einschließlich "],
+  ["vom ", " bis einschließlich "],
+  ["von ", " bis zum "],
+  ["vom ", " bis zum "],
+  ["von ", " bis "],
+  ["vom ", " bis "],
+  ["zwischen ", " und "],
+  ["", " bis einschließlich "],
+  ["", " bis "],
+  ["", " - "],
+  ["", " – "],
+  ["", " — "],
+  ["zwischen ", "-"],
+  ["", "-"],
+  ["zwischen ", "–"],
+  ["", "–"],
+  ["zwischen ", "—"],
+  ["", "—"],
+  ["zwischen ", "~"],
+  ["", "~"],
+] as const;
+
+const sharedRelativeYearRange = (input: string) => {
+  const match = EffectString.match(/^(.+) (letzten|dieses|nächsten) jahres$/u)(input);
+  if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
+  const year = `${textAt(match.value, 2)} jahres`;
+  return joinedPeriodCandidate(
+    textAt(match.value, 1),
+    boundedJoins,
+    (periodInput) => {
+      const inherited = parsePeriod(`${periodInput} ${year}`);
+      return Option.isSome(inherited) ? inherited : parsePeriod(periodInput);
+    },
+    (lower, upper) => `von ${lower} bis ${upper}`,
+  );
+};
+
 const parseGerman = (input: string) => {
   const remaining = remainingPeriodPhrases.find((entry) => entry.phrase === input);
   if (remaining !== undefined) {
@@ -895,6 +933,9 @@ const parseGerman = (input: string) => {
   const elided = parseElidedDateRange(input);
   if (Option.isSome(elided)) return elided;
 
+  const inheritedYear = sharedRelativeYearRange(input);
+  if (Option.isSome(inheritedYear)) return inheritedYear;
+
   const nowBounded = joinedNowCandidate(
     input,
     [
@@ -911,28 +952,7 @@ const parseGerman = (input: string) => {
 
   const bounded = joinedPeriodCandidate(
     input,
-    [
-      ["von ", " bis einschließlich "],
-      ["vom ", " bis einschließlich "],
-      ["von ", " bis zum "],
-      ["vom ", " bis zum "],
-      ["von ", " bis "],
-      ["vom ", " bis "],
-      ["zwischen ", " und "],
-      ["", " bis einschließlich "],
-      ["", " bis "],
-      ["", " - "],
-      ["", " – "],
-      ["", " — "],
-      ["zwischen ", "-"],
-      ["", "-"],
-      ["zwischen ", "–"],
-      ["", "–"],
-      ["zwischen ", "—"],
-      ["", "—"],
-      ["zwischen ", "~"],
-      ["", "~"],
-    ],
+    boundedJoins,
     parsePeriod,
     (lower, upper) => `von ${lower} bis ${upper}`,
   );
@@ -975,6 +995,7 @@ const staticPeriodPhrases = [
     `nächster ${month}`,
     `${month} letzten jahres`,
     `${month} nächsten jahres`,
+    `${month} vor einem jahr`,
   ]),
   ...nextWeekdays.map((entry) => entry.phrase),
 ];
@@ -1008,12 +1029,18 @@ const germanSuggestionPhrases = [
   ]),
   ...staticPeriodPhrases,
   ...currentBoundaryPhrases.map((entry) => entry.phrase),
-  ...declinedBoundaryPeriods.flatMap(([, , , dative, accusative]) => [
-    `seit ${dative}`,
-    `vor ${dative}`,
-    `bis einschließlich ${accusative}`,
-    `nach ${dative}`,
-  ]),
+  ...unitPhrases.flatMap((entry) =>
+    [entry.current, entry.previous, entry.next].flatMap((period) => {
+      const dative = withRelativeCase(canonicalRelative(period), "dative");
+      const accusative = withRelativeCase(canonicalRelative(period), "accusative");
+      return [
+        `seit ${dative}`,
+        `vor ${dative}`,
+        `bis einschließlich ${accusative}`,
+        `nach ${dative}`,
+      ];
+    }),
+  ),
   ...prefixNaturalPhrases(months, boundaryPrefixes),
   "bis heute",
   "ab jetzt",
@@ -1110,7 +1137,8 @@ const renderGerman = (range: DateRangeExpr): Option.Option<string> => {
     (period) => `vor ${withRelativeCase(period, "dative")}`,
     (period) => `bis einschließlich ${withRelativeCase(period, "accusative")}`,
     (period) => `nach ${withRelativeCase(period, "dative")}`,
-    (lower, upper) => `von ${lower} bis ${upper}`,
+    (lower, upper) =>
+      `von ${withRelativeCase(lower, "dative")} bis ${withRelativeCase(upper, "accusative")}`,
     (period) => `von ${period} bis heute`,
     (period) => `von heute bis ${period}`,
     () => "bis heute",
@@ -1132,7 +1160,7 @@ export const GermanContribution = new BaseLanguageContribution({
     ...toDatePhrases.flatMap((entry) => entry.phrase.split(" ")),
     ...remainingPeriodPhrases.flatMap((entry) => entry.phrase.split(" ")),
     ...currentBoundaryPhrases.flatMap((entry) => entry.phrase.split(" ")),
-    ...relativeAliases.flatMap((entry) => entry[0].split(" ")),
+    ...relativeModifierVocabulary,
     ...unitPhrases.flatMap((entry) => [
       entry.noun,
       entry.plural,
@@ -1170,6 +1198,8 @@ export const GermanContribution = new BaseLanguageContribution({
     "letzten",
     "nach",
     "nächste",
+    "auflaufend",
+    "per",
     "nächsten",
     "seit",
     "vor",

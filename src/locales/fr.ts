@@ -662,17 +662,7 @@ const modifierAgreesWithNoun = (input: string, noun: string) => {
   const modifier = textAt(match.value, 1);
   const feminineNoun =
     noun.startsWith("semaine") || noun.startsWith("année") || noun.startsWith("annee");
-  const feminineModifier = [
-    "dernières",
-    "dernieres",
-    "passées",
-    "passes",
-    "précédentes",
-    "precedentes",
-    "prochaines",
-    "suivantes",
-  ].includes(modifier);
-  return feminineNoun === feminineModifier;
+  return feminineNoun === modifier.endsWith("es");
 };
 
 const countedUnitPattern =

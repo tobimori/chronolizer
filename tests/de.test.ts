@@ -327,6 +327,7 @@ describe("German date ranges", () => {
     ["Feb. 2025", "2025-02-01", "2025-03-01", "Februar 2025"],
     ["Mär 2025", "2025-03-01", "2025-04-01", "März 2025"],
     ["Mrz. 2025", "2025-03-01", "2025-04-01", "März 2025"],
+    ["Maerz 2025", "2025-03-01", "2025-04-01", "März 2025"],
     ["Apr 2025", "2025-04-01", "2025-05-01", "April 2025"],
     ["Jun. 2025", "2025-06-01", "2025-07-01", "Juni 2025"],
     ["Jul 2025", "2025-07-01", "2025-08-01", "Juli 2025"],
@@ -379,6 +380,7 @@ describe("German date ranges", () => {
     ["seit dem Jahr 2020", { gte: "2020-01-01" }],
     ["bis zum Jahr 2020", { lt: "2020-01-01" }],
     ["seit diesem Monat", { gte: "now/M" }],
+    ["2026 auflaufend", { gte: "2026-01-01" }],
     ["vor diesem Monat", { lt: "now/M" }],
     ["bis einschließlich diesen Monat", { lt: "now/M+1M" }],
     ["nach diesem Monat", { gte: "now/M+1M" }],
@@ -520,6 +522,7 @@ describe("German date ranges", () => {
     ["vom 1. bis 15. Januar 2025", "2025-01-01", "2025-01-16"],
     ["1.–15. Januar 2025", "2025-01-01", "2025-01-16"],
     ["1.-15. Januar", "now/y", "now/y+15d"],
+    ["01.-31.07.", "now/y+6M", "now/y+7M"],
   ] as const)(
     "maps German range with an elided month in %s",
     Effect.fn(function* (testCase) {
@@ -568,6 +571,29 @@ describe("German date ranges", () => {
       expect(yield* formatNatural(result.range, { locale: "de" })).toBe(
         "von Februar 2024 bis März 2024",
       );
+    }, Effect.provide(GermanLanguageLayer)),
+  );
+
+  it.effect.each([
+    [
+      "von August vor einem Jahr bis August dieses Jahres",
+      { gte: "now/y+7M-1y", lt: "now/y+8M" },
+      "von August vor einem Jahr bis August",
+    ],
+    [
+      "Januar bis Maerz letzten Jahres",
+      { gte: "now-1y/y", lt: "now-1y/y+3M" },
+      "von letztem Jahr bis letzten März",
+    ],
+    ["Juli per 31.07.", { gte: "now/y+6M", lt: "now/y+7M" }, "Juli"],
+    ["2026 auflaufend", { gte: "2026-01-01" }, "seit Januar 2026"],
+  ] as const)(
+    "parses and renders German contextual range %s",
+    Effect.fn(function* (testCase) {
+      const [input, expected, canonical] = testCase;
+      const result = yield* parseGerman(input);
+      expect(formatFilter(result.range)).toEqual(expected);
+      expect(yield* formatNatural(result.range, { locale: "de" })).toBe(canonical);
     }, Effect.provide(GermanLanguageLayer)),
   );
 
