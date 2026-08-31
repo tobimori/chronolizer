@@ -207,6 +207,32 @@ describe("German date ranges", () => {
   );
 
   it.effect.each([
+    ["heute vor einem Tag", "heute vor 1 Tag", "heute vor einem Tag"],
+    ["gestern in einer Woche", "gestern in 1 Woche", "gestern in einer Woche"],
+    [
+      "nächstes Wochenende vor einem Monat",
+      "nächstes Wochenende vor 1 Monat",
+      "nächstes Wochenende vor einem Monat",
+    ],
+    [
+      "Anfang des Quartals in einem Quartal",
+      "Anfang des Quartals in 1 Quartal",
+      "Anfang dieses Quartals in einem Quartal",
+    ],
+    ["heute vor einem Jahr", "heute vor 1 Jahr", "heute vor einem Jahr"],
+    ["morgen 2 Wochen zuvor", "morgen vor 2 Wochen", "morgen vor 2 Wochen"],
+  ] as const)(
+    "composes German calendar offset %s with an existing period",
+    Effect.fn(function* (testCase) {
+      const [input, equivalent, canonical] = testCase;
+      const result = yield* parseGerman(input);
+      const equivalentResult = yield* parseGerman(equivalent);
+      expect(formatFilter(result.range)).toEqual(formatFilter(equivalentResult.range));
+      expect(yield* formatNatural(result.range, { locale: "de" })).toBe(canonical);
+    }, Effect.provide(GermanLanguageLayer)),
+  );
+
+  it.effect.each([
     ["Januar 2025", "2025-01-01", "2025-02-01"],
     ["Februar 2025", "2025-02-01", "2025-03-01"],
     ["März 2025", "2025-03-01", "2025-04-01"],

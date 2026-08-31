@@ -615,25 +615,86 @@ const parseBasePeriod = (input: string) => {
   return Option.none<Period>();
 };
 
+interface CalendarOffset {
+  readonly amount: number;
+  readonly canonical: string;
+  readonly entry: UnitPhrases;
+}
+
+const countedUnit = (value: string, amount: number, dative = false) =>
+  unitPhrases.find((entry) => {
+    if (amount === 1) return value === entry.noun;
+    return value === (dative ? entry.dative : entry.plural);
+  });
+
+const parseCalendarOffsetValue = (input: string) => {
+  const singular = EffectString.match(
+    /^(vor|in) (einem tag|einer woche|einem monat|einem quartal|einem jahr)$/u,
+  )(input);
+  if (Option.isSome(singular)) {
+    const entry = unitPhrases.find((unit) => unit.indefiniteDative === textAt(singular.value, 2));
+    if (entry !== undefined) {
+      const past = textAt(singular.value, 1) === "vor";
+      return Option.some({
+        amount: past ? -1 : 1,
+        canonical: `${past ? "vor" : "in"} ${canonicalRelative(entry.indefiniteDative)}`,
+        entry,
+      });
+    }
+  }
+
+  const prefixed = EffectString.match(
+    /^(vor|in) ([1-9]\d*) (tag|tagen|woche|wochen|monat|monaten|quartal|quartalen|jahr|jahren)$/u,
+  )(input);
+  const prior = EffectString.match(
+    /^([1-9]\d*) (tag|tage|woche|wochen|monat|monate|quartal|quartale|jahr|jahre) zuvor$/u,
+  )(input);
+  const match = Option.firstSomeOf([prefixed, prior]);
+  if (Option.isNone(match)) return Option.none<CalendarOffset>();
+  const amountText = textAt(match.value, Option.isSome(prefixed) ? 2 : 1);
+  const unitText = textAt(match.value, Option.isSome(prefixed) ? 3 : 2);
+  const amount = parseTrailingCount(amountText);
+  if (Option.isNone(amount)) return Option.none<CalendarOffset>();
+  const entry = countedUnit(unitText, amount.value, Option.isSome(prefixed));
+  if (entry === undefined) return Option.none<CalendarOffset>();
+  const past =
+    Option.isSome(prior) || (Option.isSome(prefixed) && textAt(match.value, 1) === "vor");
+  const direction = past ? "vor" : "in";
+  const noun = amount.value === 1 ? entry.noun : entry.dative;
+  return Option.some({
+    amount: past ? -amount.value : amount.value,
+    canonical: `${direction} ${amount.value} ${title(noun)}`,
+    entry,
+  });
+};
+
 // RETURN TYPE: Recursive period offsets require an explicit result type.
 const parsePeriod = (input: string): Option.Option<Period> => {
-  const shifted = EffectString.match(
-    /^(.+) (vor|in) ([1-9]\d*) (tag|tagen|woche|wochen|monat|monaten|quartal|quartalen|jahr|jahren)$/u,
-  )(input);
-  if (Option.isSome(shifted)) {
-    const amount = parseTrailingCount(textAt(shifted.value, 3));
-    const unitText = textAt(shifted.value, 4);
-    const entry = unitPhrases.find((unit) =>
-      [unit.noun, unit.plural, unit.dative].includes(unitText),
-    );
-    const period = parsePeriod(textAt(shifted.value, 1));
-    if (Option.isSome(amount) && entry !== undefined && Option.isSome(period)) {
-      const past = textAt(shifted.value, 2) === "vor";
-      const direction = past ? -amount.value : amount.value;
-      const noun = amount.value === 1 ? entry.noun : entry.dative;
-      const canonical = `${period.value.canonical} ${past ? "vor" : "in"} ${amount.value} ${title(noun)}`;
-      return Option.some(shiftPeriod(period.value, direction, entry.unit, canonical));
+  let separator = input.indexOf(" ");
+  while (separator !== -1) {
+    const offsetStart = separator + 1;
+    const firstOffsetCharacter = input[offsetStart] ?? "";
+    const canStartOffset =
+      input.startsWith("vor ", offsetStart) ||
+      input.startsWith("in ", offsetStart) ||
+      (firstOffsetCharacter >= "1" && firstOffsetCharacter <= "9" && input.endsWith(" zuvor"));
+    if (canStartOffset) {
+      const offset = parseCalendarOffsetValue(input.slice(offsetStart));
+      if (Option.isSome(offset)) {
+        const period = parsePeriod(input.slice(0, separator));
+        if (Option.isSome(period)) {
+          return Option.some(
+            shiftPeriod(
+              period.value,
+              offset.value.amount,
+              offset.value.entry.unit,
+              `${period.value.canonical} ${offset.value.canonical}`,
+            ),
+          );
+        }
+      }
     }
+    separator = input.indexOf(" ", offsetStart);
   }
 
   const edge = EffectString.match(/^(anfang|beginn|ende) (.+)$/u)(input);
@@ -707,48 +768,10 @@ const boundaryCandidate = (input: string) =>
     (result) => candidate(result.range, canonicalRelative(input)),
   );
 
-const countedUnit = (value: string, amount: number, dative = false) =>
-  unitPhrases.find((entry) => {
-    if (amount === 1) return value === entry.noun;
-    return value === (dative ? entry.dative : entry.plural);
-  });
-
-const parseCalendarOffset = (input: string) => {
-  const singular = EffectString.match(
-    /^(vor|in) (einem tag|einer woche|einem monat|einem quartal|einem jahr)$/u,
-  )(input);
-  if (Option.isSome(singular)) {
-    const entry = unitPhrases.find((unit) => unit.indefiniteDative === textAt(singular.value, 2));
-    if (entry !== undefined) {
-      const isPast = textAt(singular.value, 1) === "vor";
-      const direction = isPast ? -1 : 1;
-      const canonical = `${isPast ? "vor" : "in"} ${canonicalRelative(entry.indefiniteDative)}`;
-      return Option.some(relativePeriod(entry.unit, direction, canonical));
-    }
-  }
-
-  const prefixed = EffectString.match(
-    /^(vor|in) ([1-9]\d*) (tag|tagen|woche|wochen|monat|monaten|quartal|quartalen|jahr|jahren)$/u,
-  )(input);
-  const prior = EffectString.match(
-    /^([1-9]\d*) (tag|tage|woche|wochen|monat|monate|quartal|quartale|jahr|jahre) zuvor$/u,
-  )(input);
-  const match = Option.firstSomeOf([prefixed, prior]);
-  if (Option.isNone(match)) return Option.none<Period>();
-  const amountText = textAt(match.value, Option.isSome(prefixed) ? 2 : 1);
-  const unitText = textAt(match.value, Option.isSome(prefixed) ? 3 : 2);
-  const amount = parseTrailingCount(amountText);
-  if (Option.isNone(amount)) return Option.none<Period>();
-  const entry = countedUnit(unitText, amount.value, Option.isSome(prefixed));
-  if (entry === undefined) return Option.none<Period>();
-  const isPast =
-    Option.isSome(prior) || (Option.isSome(prefixed) && textAt(match.value, 1) === "vor");
-  const direction = isPast ? -amount.value : amount.value;
-  const directionName = isPast ? "vor" : "in";
-  const noun = amount.value === 1 ? entry.noun : entry.dative;
-  const canonical = `${directionName} ${amount.value} ${title(noun)}`;
-  return Option.some(relativePeriod(entry.unit, direction, canonical));
-};
+const parseCalendarOffset = (input: string) =>
+  parseCalendarOffsetValue(input).pipe(
+    Option.map((offset) => relativePeriod(offset.entry.unit, offset.amount, offset.canonical)),
+  );
 
 const parseRollingPeriod = (input: string) => {
   const past = EffectString.match(
@@ -1018,9 +1041,12 @@ const renderGerman = (range: DateRangeExpr): Option.Option<string> => {
     const entry = unitPhrases.find((unit) => unit.unit === shifted.value.unit);
     if (Option.isSome(base) && entry !== undefined) {
       const amount = Math.abs(shifted.value.amount);
-      const noun = amount === 1 ? entry.noun : entry.dative;
+      const offset =
+        amount === 1
+          ? canonicalRelative(entry.indefiniteDative)
+          : `${amount} ${title(entry.dative)}`;
       const direction = shifted.value.amount < 0 ? "vor" : "in";
-      return Option.some(`${base.value} ${direction} ${amount} ${title(noun)}`);
+      return Option.some(`${base.value} ${direction} ${offset}`);
     }
   }
 
