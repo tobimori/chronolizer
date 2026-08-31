@@ -571,26 +571,21 @@ const countedUnit = (value: string, amount: number) => {
   return alias === undefined ? undefined : units.find((entry) => entry.unit === alias[1]);
 };
 
-const countedUnitPattern = "dag|dagen|week|weken|maand|maanden|kwartaal|kwartalen|jaar|jaren";
-const countedPattern = (source: string) =>
-  new RegExp(source.replace("UNIT", countedUnitPattern), "u");
-const calendarPastPattern = countedPattern("^([1-9]\\d*) (UNIT) geleden$");
+const calendarPastPattern = /^([1-9]\d*) ([^ ]+) geleden$/u;
 const calendarFuturePatterns = [
-  countedPattern("^(?:over|binnen) ([1-9]\\d*) (UNIT)$"),
-  countedPattern("^([1-9]\\d*) (UNIT) later$"),
+  /^(?:over|binnen) ([1-9]\d*) ([^ ]+)$/u,
+  /^([1-9]\d*) ([^ ]+) later$/u,
 ];
 const rollingPastPatterns = [
-  countedPattern("^(?:(?:de|in de) )?(?:afgelopen|laatste|vorige) ([1-9]\\d*) (UNIT)$"),
-  countedPattern("^([1-9]\\d*) (?:afgelopen|laatste|vorige) (UNIT)$"),
+  /^(?:(?:de|in de) )?(?:afgelopen|laatste|vorige) ([1-9]\d*) ([^ ]+)$/u,
+  /^([1-9]\d*) (?:afgelopen|laatste|vorige) ([^ ]+)$/u,
 ];
 const rollingFuturePatterns = [
-  countedPattern(
-    "^(?:(?:de|in de|binnen de) )?(?:komende|volgende|aankomende) ([1-9]\\d*) (UNIT)$",
-  ),
-  countedPattern("^([1-9]\\d*) (?:komende|volgende|aankomende) (UNIT)$"),
+  /^(?:(?:de|in de|binnen de) )?(?:komende|volgende|aankomende) ([1-9]\d*) ([^ ]+)$/u,
+  /^([1-9]\d*) (?:komende|volgende|aankomende) ([^ ]+)$/u,
 ];
-const rollingSincePattern = countedPattern("^(?:sinds|gedurende) ([1-9]\\d*) (UNIT)$");
-const rollingBarePattern = countedPattern("^([1-9]\\d*) (UNIT)$");
+const rollingSincePattern = /^(?:sinds|gedurende) ([1-9]\d*) ([^ ]+)$/u;
+const rollingBarePattern = /^([1-9]\d*) ([^ ]+)$/u;
 
 const firstPatternMatch = (input: string, patterns: ReadonlyArray<RegExp>) =>
   Option.firstSomeOf(patterns.map((pattern) => EffectString.match(pattern)(input)));

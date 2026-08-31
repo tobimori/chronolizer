@@ -380,7 +380,7 @@ const parseRelativeMonth = (input: string) => {
 };
 
 const parseRelativeUnit = (input: string) => {
-  const articlePeriod = EffectString.match(/^the (day|week|month|quarter|year)$/u)(input);
+  const articlePeriod = EffectString.match(/^the ([^ ]+)$/u)(input);
   if (Option.isSome(articlePeriod)) {
     const entry = units.find((unit) => unit[0] === textAt(articlePeriod.value, 1));
     if (entry !== undefined) {
@@ -388,9 +388,7 @@ const parseRelativeUnit = (input: string) => {
     }
   }
 
-  const outerRelative = EffectString.match(
-    /^(?:the )?(day|week|month|quarter|year) (before last|after next)$/u,
-  )(input);
+  const outerRelative = EffectString.match(/^(?:the )?([^ ]+) (before last|after next)$/u)(input);
   if (Option.isSome(outerRelative)) {
     const entry = units.find((unit) => unit[0] === textAt(outerRelative.value, 1));
     if (entry !== undefined) {
@@ -473,9 +471,7 @@ const parsePeriodEdge = (input: string) => {
 
 // RETURN TYPE: Recursive period offsets require an explicit result type.
 const parsePeriod = (input: string): Option.Option<Period> => {
-  const shifted = EffectString.match(
-    /^(.+) ([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years) (ago|prior|from now)$/u,
-  )(input);
+  const shifted = EffectString.match(/^(.+) ([1-9]\d*) ([^ ]+) (ago|prior|from now)$/u)(input);
   if (Option.isSome(shifted)) {
     const amount = parseTrailingCount(textAt(shifted.value, 2));
     const unitText = textAt(shifted.value, 3);
@@ -492,9 +488,7 @@ const parsePeriod = (input: string): Option.Option<Period> => {
     }
   }
 
-  const relativeShift = EffectString.match(
-    /^([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years) (before|after) (.+)$/u,
-  )(input);
+  const relativeShift = EffectString.match(/^([1-9]\d*) ([^ ]+) (before|after) (.+)$/u)(input);
   if (Option.isSome(relativeShift)) {
     const amount = parseTrailingCount(textAt(relativeShift.value, 1));
     const unitText = textAt(relativeShift.value, 2);
@@ -570,7 +564,7 @@ const countedUnit = (value: string, amount: number) =>
 
 const parseCalendarOffset = (input: string) => {
   const singular = EffectString.match(
-    /^(?:(?:a|one) (day|week|month|quarter|year) (ago|prior|from now)|in (?:a|one) (day|week|month|quarter|year))$/u,
+    /^(?:(?:a|one) ([^ ]+) (ago|prior|from now)|in (?:a|one) ([^ ]+))$/u,
   )(input);
   if (Option.isSome(singular)) {
     const unitText = textAt(singular.value, 1) || textAt(singular.value, 3);
@@ -584,15 +578,9 @@ const parseCalendarOffset = (input: string) => {
     }
   }
 
-  const past = EffectString.match(
-    /^([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years) (?:ago|prior)$/u,
-  )(input);
-  const futureIn = EffectString.match(
-    /^in ([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years)$/u,
-  )(input);
-  const futureFromNow = EffectString.match(
-    /^([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years) from now$/u,
-  )(input);
+  const past = EffectString.match(/^([1-9]\d*) ([^ ]+) (?:ago|prior)$/u)(input);
+  const futureIn = EffectString.match(/^in ([1-9]\d*) ([^ ]+)$/u)(input);
+  const futureFromNow = EffectString.match(/^([1-9]\d*) ([^ ]+) from now$/u)(input);
   const match = Option.firstSomeOf([past, futureIn, futureFromNow]);
   if (Option.isNone(match)) return Option.none<Period>();
   const amount = parseTrailingCount(textAt(match.value, 1));
@@ -608,17 +596,17 @@ const parseCalendarOffset = (input: string) => {
 
 const parseRollingPeriod = (input: string) => {
   const past = EffectString.match(
-    /^(?:(?:last|previous|past) |(?:in|over) the (?:last|previous|past) )?([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years)$/u,
+    /^(?:(?:last|previous|past) |(?:in|over) the (?:last|previous|past) )?([1-9]\d*) ([^ ]+)$/u,
   )(input);
   const singularPast = EffectString.match(
-    /^(?:past|the past|in the past|over the past|this past) (day|week|month|quarter|year)$/u,
+    /^(?:past|the past|in the past|over the past|this past) ([^ ]+)$/u,
   )(input);
   const future = EffectString.match(
-    /^(?:(?:next|coming|within) |(?:in|over|within) the (?:next|coming) )([1-9]\d*) (day|days|week|weeks|month|months|quarter|quarters|year|years)$/u,
+    /^(?:(?:next|coming|within) |(?:in|over|within) the (?:next|coming) )([1-9]\d*) ([^ ]+)$/u,
   )(input);
-  const singularFuture = EffectString.match(
-    /^(?:in|over|within) the (?:next|coming) (day|week|month|quarter|year)$/u,
-  )(input);
+  const singularFuture = EffectString.match(/^(?:in|over|within) the (?:next|coming) ([^ ]+)$/u)(
+    input,
+  );
   const match = Option.firstSomeOf([past, singularPast, future, singularFuture]);
   if (Option.isNone(match)) return Option.none<ReturnType<typeof candidate>>();
   const singular = Option.isSome(singularPast) || Option.isSome(singularFuture);

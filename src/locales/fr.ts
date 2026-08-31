@@ -654,10 +654,14 @@ const countedUnit = (value: string, amount: number) => {
   return unit === undefined ? undefined : units.find((entry) => entry.unit === unit);
 };
 
+const rollingPastModifierPattern =
+  "derni(?:ers|ères|eres)|pass(?:és|ées|es)|pr[eé]c[eé]dent(?:s|es)";
+const rollingFutureModifierPattern = "prochain(?:s|es)|suivant(?:s|es)";
+const rollingModifierPattern = `${rollingPastModifierPattern}|${rollingFutureModifierPattern}`;
+const rollingModifierMatchPattern = new RegExp(`(?:^| )(${rollingModifierPattern})(?: |$)`, "u");
+
 const modifierAgreesWithNoun = (input: string, noun: string) => {
-  const match = EffectString.match(
-    /(?:^| )(derniers|dernières|dernieres|passés|passées|passes|précédents|précédentes|precedents|precedentes|prochains|prochaines|suivants|suivantes)(?: |$)/u,
-  )(input);
+  const match = EffectString.match(rollingModifierMatchPattern)(input);
   if (Option.isNone(match)) return true;
   const modifier = textAt(match.value, 1);
   const feminineNoun =
@@ -665,35 +669,25 @@ const modifierAgreesWithNoun = (input: string, noun: string) => {
   return feminineNoun === modifier.endsWith("es");
 };
 
-const countedUnitPattern =
-  "jour|jours|semaine|semaines|mois|trimestre|trimestres|an|ans|année|annee|années|annees";
+const compilePattern = (source: string) => new RegExp(source, "u");
 
-const compileCountedPattern = (source: string) =>
-  new RegExp(source.replace("UNIT", countedUnitPattern), "u");
-
-const calendarPastPattern = compileCountedPattern("^il y a ([1-9]\\d*) (UNIT)$");
-const calendarFuturePattern = compileCountedPattern("^dans ([1-9]\\d*) (UNIT)$");
-const rollingSincePattern = compileCountedPattern("^depuis ([1-9]\\d*) (UNIT)$");
-const rollingBarePattern = compileCountedPattern("^([1-9]\\d*) (UNIT)$");
+const calendarPastPattern = /^il y a ([1-9]\d*) ([^ ]+)$/u;
+const calendarFuturePattern = /^dans ([1-9]\d*) ([^ ]+)$/u;
+const rollingSincePattern = /^depuis ([1-9]\d*) ([^ ]+)$/u;
+const rollingBarePattern = /^([1-9]\d*) ([^ ]+)$/u;
 const rollingPastPatterns = [
-  compileCountedPattern(
-    "^(?:(?:les|la) )?(?:derniers|dernières|dernieres|passés|passées|passes|précédents|précédentes|precedents|precedentes) ([1-9]\\d*) (UNIT)$",
+  compilePattern(`^(?:(?:les|la) )?(?:${rollingPastModifierPattern}) ([1-9]\\d*) ([^ ]+)$`),
+  compilePattern(
+    `^(?:(?:les|la|au cours des|pendant les) )?([1-9]\\d*) (?:${rollingPastModifierPattern}) ([^ ]+)$`,
   ),
-  compileCountedPattern(
-    "^(?:(?:les|la|au cours des|pendant les) )?([1-9]\\d*) (?:derniers|dernières|dernieres|passés|passées|passes|précédents|précédentes|precedents|precedentes) (UNIT)$",
-  ),
-  compileCountedPattern(
-    "^([1-9]\\d*) (UNIT) (?:derniers|dernières|dernieres|passés|passées|passes|précédents|précédentes|precedents|precedentes)$",
-  ),
+  compilePattern(`^([1-9]\\d*) ([^ ]+) (?:${rollingPastModifierPattern})$`),
 ];
 const rollingFuturePatterns = [
-  compileCountedPattern(
-    "^(?:(?:les|la) )?(?:prochains|prochaines|suivants|suivantes) ([1-9]\\d*) (UNIT)$",
+  compilePattern(`^(?:(?:les|la) )?(?:${rollingFutureModifierPattern}) ([1-9]\\d*) ([^ ]+)$`),
+  compilePattern(
+    `^(?:(?:les|la|au cours des|pendant les) )?([1-9]\\d*) (?:${rollingFutureModifierPattern}) ([^ ]+)$`,
   ),
-  compileCountedPattern(
-    "^(?:(?:les|la|au cours des|pendant les) )?([1-9]\\d*) (?:prochains|prochaines|suivants|suivantes) (UNIT)$",
-  ),
-  compileCountedPattern("^([1-9]\\d*) (UNIT) (?:prochains|prochaines|suivants|suivantes|à venir)$"),
+  compilePattern(`^([1-9]\\d*) ([^ ]+) (?:${rollingFutureModifierPattern}|à venir)$`),
 ];
 
 const firstPatternMatch = (input: string, patterns: ReadonlyArray<RegExp>) =>

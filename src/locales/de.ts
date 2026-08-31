@@ -628,9 +628,7 @@ const countedUnit = (value: string, amount: number, dative = false) =>
   });
 
 const parseCalendarOffsetValue = (input: string) => {
-  const singular = EffectString.match(
-    /^(vor|in) (einem tag|einer woche|einem monat|einem quartal|einem jahr)$/u,
-  )(input);
+  const singular = EffectString.match(/^(vor|in) (ein[^ ]* [^ ]+)$/u)(input);
   if (Option.isSome(singular)) {
     const entry = unitPhrases.find((unit) => unit.indefiniteDative === textAt(singular.value, 2));
     if (entry !== undefined) {
@@ -643,12 +641,8 @@ const parseCalendarOffsetValue = (input: string) => {
     }
   }
 
-  const prefixed = EffectString.match(
-    /^(vor|in) ([1-9]\d*) (tag|tagen|woche|wochen|monat|monaten|quartal|quartalen|jahr|jahren)$/u,
-  )(input);
-  const prior = EffectString.match(
-    /^([1-9]\d*) (tag|tage|woche|wochen|monat|monate|quartal|quartale|jahr|jahre) zuvor$/u,
-  )(input);
+  const prefixed = EffectString.match(/^(vor|in) ([1-9]\d*) ([^ ]+)$/u)(input);
+  const prior = EffectString.match(/^([1-9]\d*) ([^ ]+) zuvor$/u)(input);
   const match = Option.firstSomeOf([prefixed, prior]);
   if (Option.isNone(match)) return Option.none<CalendarOffset>();
   const amountText = textAt(match.value, Option.isSome(prefixed) ? 2 : 1);
@@ -775,32 +769,24 @@ const parseCalendarOffset = (input: string) =>
 
 const parseRollingPeriod = (input: string) => {
   const past = EffectString.match(
-    /^(?:(?:die letzten|letzten|letzte|vergangene|vorherige) )?([1-9]\d*) (tag|tage|woche|wochen|monat|monate|quartal|quartale|jahr|jahre)$/u,
+    /^(?:(?:die letzten|letzten|letzte|vergangene|vorherige) )?([1-9]\d*) ([^ ]+)$/u,
   )(input);
   const pastDative = EffectString.match(
-    /^(?:(?:in den letzten|in den vergangenen|in den vorherigen) |seit )([1-9]\d*) (tag|tagen|woche|wochen|monat|monaten|quartal|quartalen|jahr|jahren)$/u,
+    /^(?:(?:in den letzten|in den vergangenen|in den vorherigen) |seit )([1-9]\d*) ([^ ]+)$/u,
   )(input);
-  const singularSince = EffectString.match(
-    /^seit (einem tag|einer woche|einem monat|einem quartal|einem jahr)$/u,
-  )(input);
-  const pastGenitive = EffectString.match(
-    /^während der letzten ([1-9]\d*) (tag|tage|woche|wochen|monat|monate|quartal|quartale|jahr|jahre)$/u,
-  )(input);
+  const singularSince = EffectString.match(/^seit (ein[^ ]* [^ ]+)$/u)(input);
+  const pastGenitive = EffectString.match(/^während der letzten ([1-9]\d*) ([^ ]+)$/u)(input);
   const future = EffectString.match(
-    /^(?:die nächsten|nächsten|nächste|kommende) ([1-9]\d*) (tag|tage|woche|wochen|monat|monate|quartal|quartale|jahr|jahre)$/u,
+    /^(?:die nächsten|nächsten|nächste|kommende) ([1-9]\d*) ([^ ]+)$/u,
   )(input);
   const futureDative = EffectString.match(
-    /^(?:in den nächsten|in den kommenden|innerhalb von) ([1-9]\d*) (tag|tagen|woche|wochen|monat|monaten|quartal|quartalen|jahr|jahren)$/u,
+    /^(?:in den nächsten|in den kommenden|innerhalb von) ([1-9]\d*) ([^ ]+)$/u,
   )(input);
-  const singularFuture = EffectString.match(
-    /^innerhalb (eines tages|einer woche|eines monats|eines quartals|eines jahres)$/u,
-  )(input);
-  const futureGenitive = EffectString.match(
-    /^innerhalb der nächsten ([1-9]\d*) (tag|tage|woche|wochen|monat|monate|quartal|quartale|jahr|jahre)$/u,
-  )(input);
+  const singularFuture = EffectString.match(/^innerhalb (ein[^ ]* [^ ]+)$/u)(input);
+  const futureGenitive = EffectString.match(/^innerhalb der nächsten ([1-9]\d*) ([^ ]+)$/u)(input);
   const match = Option.firstSomeOf([
-    past,
     pastDative,
+    past,
     singularSince,
     pastGenitive,
     future,

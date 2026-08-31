@@ -661,21 +661,17 @@ const parsePeriod = (input: string): Option.Option<Period> => {
 
 const countedUnit = (value: string) => unitAliases.find((entry) => entry[0] === value)?.[1];
 
-const countedUnitPattern =
-  "dzień|dni|tydzień|tygodnie|tygodni|miesiąc|miesiące|miesięcy|kwartał|kwartały|kwartałów|rok|lata|lat";
-const countedPattern = (source: string) =>
-  new RegExp(source.replace("UNIT", countedUnitPattern), "u");
-const calendarPastPattern = countedPattern("^(?:dokładnie )?(?:([1-9]\\d*) )?(UNIT) temu$");
-const calendarFuturePattern = countedPattern("^za (?:([1-9]\\d*) )?(UNIT)$");
+const calendarPastPattern = /^(?:dokładnie )?(?:([1-9]\d*) )?([^ ]+) temu$/u;
+const calendarFuturePattern = /^za (?:([1-9]\d*) )?([^ ]+)$/u;
 const rollingPastPatterns = [
-  countedPattern("^(?:ostatni|ostatnie|ostatnich|miniony|minione|minionych) ([1-9]\\d*) (UNIT)$"),
-  countedPattern("^w ciągu (?:ostatniego|ostatnich|minionego|minionych) ([1-9]\\d*) (UNIT)$"),
+  /^(?:ostatni|ostatnie|ostatnich|miniony|minione|minionych) ([1-9]\d*) ([^ ]+)$/u,
+  /^w ciągu (?:ostatniego|ostatnich|minionego|minionych) ([1-9]\d*) ([^ ]+)$/u,
 ];
 const rollingFuturePatterns = [
-  countedPattern("^(?:następny|następne|następnych|kolejny|kolejne|kolejnych) ([1-9]\\d*) (UNIT)$"),
-  countedPattern("^w ciągu (?:najbliższego|najbliższych) ([1-9]\\d*) (UNIT)$"),
+  /^(?:następny|następne|następnych|kolejny|kolejne|kolejnych) ([1-9]\d*) ([^ ]+)$/u,
+  /^w ciągu (?:najbliższego|najbliższych) ([1-9]\d*) ([^ ]+)$/u,
 ];
-const rollingBarePattern = countedPattern("^([1-9]\\d*) (UNIT)$");
+const rollingBarePattern = /^([1-9]\d*) ([^ ]+)$/u;
 
 const firstPatternMatch = (input: string, patterns: ReadonlyArray<RegExp>) =>
   Option.firstSomeOf(patterns.map((pattern) => EffectString.match(pattern)(input)));

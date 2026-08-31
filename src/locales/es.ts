@@ -652,9 +652,7 @@ const agreesWithSingularModifier = (
 };
 
 const parseCalendarOffset = (input: string) => {
-  const match = EffectString.match(
-    /^(hace|dentro de|en) ([1-9]\d*|un|una) (día|dia|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
-  )(input);
+  const match = EffectString.match(/^(hace|dentro de|en) ([1-9]\d*|un|una) ([^ ]+)$/u)(input);
   if (Option.isNone(match)) return Option.none<Period>();
   const amount = writtenAmount(textAt(match.value, 2));
   if (Option.isNone(amount)) return Option.none<Period>();
@@ -692,9 +690,7 @@ const rollingCandidate = (entry: UnitForms, amount: number, future: boolean) =>
   );
 
 const parseRollingSince = (input: string) => {
-  const since = EffectString.match(
-    /^desde hace ([1-9]\d*|un|una) (día|dia|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
-  )(input);
+  const since = EffectString.match(/^desde hace ([1-9]\d*|un|una) ([^ ]+)$/u)(input);
   if (Option.isSome(since)) {
     const amount = writtenAmount(textAt(since.value, 1));
     if (Option.isSome(amount)) {
@@ -714,9 +710,7 @@ const parseRollingSince = (input: string) => {
 };
 
 const parseSingularRolling = (input: string) => {
-  const futureSingular = EffectString.match(
-    /^desde ahora durante (un|una) (día|dia|semana|mes|trimestre|año|ano)$/u,
-  )(input);
+  const futureSingular = EffectString.match(/^desde ahora durante (un|una) ([^ ]+)$/u)(input);
   if (Option.isSome(futureSingular)) {
     const entry = countedUnit(textAt(futureSingular.value, 2), 1);
     if (
@@ -728,7 +722,7 @@ const parseSingularRolling = (input: string) => {
   }
 
   const lastSingular = EffectString.match(
-    /^(?:(?:durante|en) )?(?:este )?(?:(el|la) )?(último|ultimo|última|ultima) (día|dia|semana|mes|trimestre|año|ano)$/u,
+    /^(?:(?:durante|en) )?(?:este )?(?:(el|la) )?([uú]ltim[oa]) ([^ ]+)$/u,
   )(input);
   if (Option.isSome(lastSingular)) {
     const entry = countedUnit(textAt(lastSingular.value, 3), 1);
@@ -742,9 +736,9 @@ const parseSingularRolling = (input: string) => {
     }
   }
 
-  const nextSingular = EffectString.match(
-    /^durante (el|la) (próximo|proximo|próxima|proxima|siguiente) (día|dia|semana|mes|trimestre|año|ano)$/u,
-  )(input);
+  const nextSingular = EffectString.match(/^durante (el|la) (pr[oó]xim[oa]|siguiente) ([^ ]+)$/u)(
+    input,
+  );
   if (Option.isSome(nextSingular)) {
     const entry = countedUnit(textAt(nextSingular.value, 3), 1);
     const modifier = textAt(nextSingular.value, 2);
@@ -762,15 +756,14 @@ const parseSingularRolling = (input: string) => {
 
 const parseCountedRolling = (input: string) => {
   const counted = EffectString.match(
-    /^(?:(?:durante|en) )?(?:(los|las) )?(últimos|ultimos|últimas|ultimas|pasados|pasadas|anteriores|próximos|proximos|próximas|proximas|siguientes) ([1-9]\d*) (día|dia|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
+    /^(?:(?:durante|en) )?(?:(los|las) )?([uú]ltim(?:os|as)|pasad(?:os|as)|anteriores|pr[oó]xim(?:os|as)|siguientes) ([1-9]\d*) ([^ ]+)$/u,
   )(input);
   if (Option.isSome(counted)) {
     const amount = parseTrailingCount(textAt(counted.value, 3));
     if (Option.isSome(amount) && amount.value > 1) {
       const entry = countedUnit(textAt(counted.value, 4), amount.value);
       const modifier = textAt(counted.value, 2);
-      const future =
-        modifier.startsWith("próxim") || modifier.startsWith("proxim") || modifier === "siguientes";
+      const future = modifier.includes("xim") || modifier === "siguientes";
       if (
         entry !== undefined &&
         agreesWithArticle(entry, textAt(counted.value, 1), true) &&
@@ -781,9 +774,7 @@ const parseCountedRolling = (input: string) => {
     }
   }
 
-  const bare = EffectString.match(
-    /^([1-9]\d*) (día|dia|días|dias|semana|semanas|mes|meses|trimestre|trimestres|año|años|ano|anos)$/u,
-  )(input);
+  const bare = EffectString.match(/^([1-9]\d*) ([^ ]+)$/u)(input);
   if (Option.isNone(bare)) return Option.none<ReturnType<typeof candidate>>();
   const amount = parseTrailingCount(textAt(bare.value, 1));
   if (Option.isNone(amount)) return Option.none<ReturnType<typeof candidate>>();

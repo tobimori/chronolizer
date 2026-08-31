@@ -538,24 +538,18 @@ const parsePeriod = (input: string): Option.Option<Period> => {
 
 const countedUnit = (value: string) => unitAliases.find((entry) => entry[0] === value)?.[1];
 
-const countedUnitPattern = "gün|gun|hafta|ay|çeyrek|ceyrek|yıl|yil|sene";
-const countedPattern = (source: string) =>
-  new RegExp(source.replace("UNIT", countedUnitPattern), "u");
-const calendarPastPattern = countedPattern("^([1-9]\\d*) (UNIT) önce$");
-const calendarFuturePatterns = [
-  countedPattern("^([1-9]\\d*) (UNIT) sonra$"),
-  countedPattern("^([1-9]\\d*) (UNIT) içinde$"),
-];
+const calendarPastPattern = /^([1-9]\d*) ([^ ]+) önce$/u;
+const calendarFuturePatterns = [/^([1-9]\d*) ([^ ]+) sonra$/u, /^([1-9]\d*) ([^ ]+) içinde$/u];
 const rollingPastPatterns = [
-  countedPattern("^(?:son|geçen|önceki|geçtiğimiz) ([1-9]\\d*) (UNIT)$"),
-  countedPattern("^([1-9]\\d*) (?:son|geçen|önceki) (UNIT)$"),
+  /^(?:son|geçen|önceki|geçtiğimiz) ([1-9]\d*) ([^ ]+)$/u,
+  /^([1-9]\d*) (?:son|geçen|önceki) ([^ ]+)$/u,
 ];
 const rollingFuturePatterns = [
-  countedPattern("^(?:gelecek|önümüzdeki|sonraki) ([1-9]\\d*) (UNIT)$"),
-  countedPattern("^([1-9]\\d*) (?:gelecek|sonraki) (UNIT)$"),
+  /^(?:gelecek|önümüzdeki|sonraki) ([1-9]\d*) ([^ ]+)$/u,
+  /^([1-9]\d*) (?:gelecek|sonraki) ([^ ]+)$/u,
 ];
-const rollingSincePattern = countedPattern("^([1-9]\\d*) (UNIT) boyunca$");
-const rollingBarePattern = countedPattern("^([1-9]\\d*) (UNIT)$");
+const rollingSincePattern = /^([1-9]\d*) ([^ ]+) boyunca$/u;
+const rollingBarePattern = /^([1-9]\d*) ([^ ]+)$/u;
 
 const firstPatternMatch = (input: string, patterns: ReadonlyArray<RegExp>) =>
   Option.firstSomeOf(patterns.map((pattern) => EffectString.match(pattern)(input)));

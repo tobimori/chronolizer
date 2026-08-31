@@ -645,18 +645,12 @@ const parsePeriod = (input: string): Option.Option<Period> => {
 
 const countedUnit = (value: string) => unitAliases.find((entry) => entry[0] === value)?.[1];
 
-const countedUnitPattern =
-  "den|dny|dnů|dnem|týden|týdny|týdnů|týdnem|měsíc|měsíce|měsíců|měsícem|měsíci|čtvrtletí|čtvrtletím|čtvrtletími|rok|roky|let|rokem|lety";
-const countedPattern = (source: string) =>
-  new RegExp(source.replace("UNIT", countedUnitPattern), "u");
-const calendarPastPattern = countedPattern("^před ([1-9]\\d*) (UNIT)$");
-const calendarFuturePatterns = [countedPattern("^za ([1-9]\\d*) (UNIT)$")];
-const rollingPastPatterns = [
-  countedPattern("^(?:poslední|posledních|uplynulé|uplynulých) ([1-9]\\d*) (UNIT)$"),
-];
-const rollingFuturePatterns = [countedPattern("^(?:příští|následující) ([1-9]\\d*) (UNIT)$")];
-const rollingSincePattern = countedPattern("^za poslední ([1-9]\\d*) (UNIT)$");
-const rollingBarePattern = countedPattern("^([1-9]\\d*) (UNIT)$");
+const calendarPastPattern = /^před ([1-9]\d*) ([^ ]+)$/u;
+const calendarFuturePatterns = [/^za ([1-9]\d*) ([^ ]+)$/u];
+const rollingPastPatterns = [/^(?:poslední|posledních|uplynulé|uplynulých) ([1-9]\d*) ([^ ]+)$/u];
+const rollingFuturePatterns = [/^(?:příští|následující) ([1-9]\d*) ([^ ]+)$/u];
+const rollingSincePattern = /^za poslední ([1-9]\d*) ([^ ]+)$/u;
+const rollingBarePattern = /^([1-9]\d*) ([^ ]+)$/u;
 
 const firstPatternMatch = (input: string, patterns: ReadonlyArray<RegExp>) =>
   Option.firstSomeOf(patterns.map((pattern) => EffectString.match(pattern)(input)));
