@@ -881,7 +881,10 @@ const renderEnglish = (range: DateRangeExpr): Option.Option<string> => {
       ...units.map((entry) => candidate(periodToDateRange(entry[1]), `${entry[0]} to date`)),
       ...units.map((entry) => candidate(remainingPeriodRange(entry[1]), `rest of the ${entry[0]}`)),
     ],
-    periods,
+    [
+      ...periods,
+      ...periods.map((period) => periodPreviousDay(period, `the day before ${period.canonical}`)),
+    ],
     (period) => `since ${period}`,
     (period) => `before ${period}`,
     (period) => `through ${period}`,

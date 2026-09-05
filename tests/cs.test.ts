@@ -315,7 +315,7 @@ describe("Czech date ranges", () => {
     ["od dneška do příštího čtvrtka", { gte: "now", lt: "now+1w/w+4d" }],
     ["příští říjen", { gte: "now+1y/y+9M", lt: "now+1y/y+10M" }],
     ["začátek roku", { gte: "now/y", lt: "now/y+1d" }],
-    ["začátek měsíce před třemi dny", { gte: "now/M-3d", lt: "now/M-2d" }],
+    ["začátek měsíce před třemi dny", { gte: "now/M-3d", lt: "now/M+1d-3d" }],
   ] as const)(
     "maps concise Czech period %s",
     Effect.fn(function* (testCase) {

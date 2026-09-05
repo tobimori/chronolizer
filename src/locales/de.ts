@@ -1,6 +1,5 @@
 import { Effect, Option, String as EffectString } from "effect";
 
-import { isIsoDate } from "../ast/schemas.ts";
 import type { DateRangeExpr, Unit } from "../ast/schemas.ts";
 import { BaseLanguageContribution } from "../language/model.ts";
 import { defineLanguagePlugin, languagePluginsLayer } from "../language/registry.ts";
@@ -23,14 +22,12 @@ import {
   decimalTens,
   datedPeriods,
   datedQuarterPeriods,
-  fixedDatePeriod,
   fixedMonthPeriod,
   fixedQuarterPeriod,
   fixedYearPeriod,
   fromNowRange,
   futurePeriod,
   futureRange,
-  isoDate,
   joinedNowCandidate,
   joinedPeriodCandidate,
   monthOfRelativeYear,
@@ -422,17 +419,13 @@ const parseNamedDate = (input: string) => {
   }
   const numeric = EffectString.match(/^([0-3]?\d)\.([01]?\d)\.(\d{4})$/u)(input);
   if (Option.isSome(numeric)) {
-    const year = validYear(textAt(numeric.value, 3));
-    const day = Number(textAt(numeric.value, 1));
-    const month = Number(textAt(numeric.value, 2));
-    if (year !== undefined && month >= 1 && month <= 12) {
-      const value = isoDate(year, month, day);
-      if (isIsoDate(value) && value !== "9999-12-31") {
-        return Option.some(
-          fixedDatePeriod(value, `${day}. ${title(textAt(months, month - 1))} ${year}`),
-        );
-      }
-    }
+    return namedDatePeriod(
+      textAt(numeric.value, 3),
+      textAt(numeric.value, 2),
+      textAt(numeric.value, 1),
+      Number,
+      (day, month, year) => `${day}. ${title(textAt(months, month - 1))} ${year}`,
+    );
   }
 
   const current = EffectString.match(/^([0-3]?\d)\.? ([a-zäöüß]+\.?)$/u)(input);

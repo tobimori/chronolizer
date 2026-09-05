@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import {
   boundedRange,
+  dateLiteral,
   greaterThanOrEqual,
   lessThan,
   now,
@@ -34,10 +35,12 @@ describe("filter expressions", () => {
     expect(formatInstantExpression(runParse(input))).toBe(input);
   });
 
-  it("normalizes adjacent shifts of the same unit", () => {
-    const expression = runParse("now+3M-1M");
-    expect(formatInstantExpression(normalizeInstant(expression))).toBe("now+2M");
-  });
+  it.each(["now+1M+1M", "now+3M-3M", "now+1q-1q", "now+1y-1y", "now+1d-1d", "now+1w-1w"])(
+    "preserves the order of calendar shifts in %s",
+    (input) => {
+      expect(formatInstantExpression(normalizeInstant(runParse(input)))).toBe(input);
+    },
+  );
 
   it.effect(
     "provides a bidirectional Effect Schema expression codec",
@@ -48,9 +51,14 @@ describe("filter expressions", () => {
     }),
   );
 
-  it("removes shifts that cancel during normalization", () => {
-    const expression = runParse("now+3M-3M");
-    expect(formatInstantExpression(normalizeInstant(expression))).toBe("now");
+  it("removes zero shifts during normalization", () => {
+    expect(normalizeInstant(shift(now(), 0, "month"))).toEqual(now());
+  });
+
+  it("formats zero shifts without losing a fixed-date separator", () => {
+    const base = shift(dateLiteral("2025-01-31"), 0, "day");
+    expect(formatInstantExpression(base)).toBe("2025-01-31");
+    expect(formatInstantExpression(shift(base, 1, "month"))).toBe("2025-01-31||+1M");
   });
 
   it.each([

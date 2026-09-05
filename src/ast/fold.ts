@@ -1,6 +1,6 @@
-import { absurd, Match, Schema } from "effect";
+import { Match, Schema } from "effect";
 
-import { DateLiteral, GreaterThanOrEqual, LessThan, Now, Shift, StartOf } from "./schemas.ts";
+import { GreaterThanOrEqual, LessThan, Now, Shift, StartOf } from "./schemas.ts";
 import type { DateRangeExpr, InstantExpr, IsoDate, Unit } from "./schemas.ts";
 
 export interface InstantAlgebra<A> {
@@ -10,7 +10,6 @@ export interface InstantAlgebra<A> {
   readonly startOf: (base: A, unit: Unit) => A;
 }
 
-const isDateLiteral = Schema.is(DateLiteral);
 const isGreaterThanOrEqual = Schema.is(GreaterThanOrEqual);
 const isLessThan = Schema.is(LessThan);
 const isNow = Schema.is(Now);
@@ -18,17 +17,14 @@ const isShift = Schema.is(Shift);
 const isStartOf = Schema.is(StartOf);
 
 // RETURN TYPE: TypeScript needs the recursive generic contract before initialization.
-export const foldInstant = <A>(expression: InstantExpr, algebra: InstantAlgebra<A>): A => {
-  if (isNow(expression)) return algebra.now();
-  if (isDateLiteral(expression)) return algebra.dateLiteral(expression.value);
-  if (isShift(expression)) {
-    return algebra.shift(foldInstant(expression.base, algebra), expression.amount, expression.unit);
-  }
-  if (isStartOf(expression)) {
-    return algebra.startOf(foldInstant(expression.base, algebra), expression.unit);
-  }
-  return absurd(expression);
-};
+export const foldInstant = <A>(expression: InstantExpr, algebra: InstantAlgebra<A>): A =>
+  Match.typeTags<InstantExpr, A>()({
+    Now: () => algebra.now(),
+    DateLiteral: (literal) => algebra.dateLiteral(literal.value),
+    Shift: (operation) =>
+      algebra.shift(foldInstant(operation.base, algebra), operation.amount, operation.unit),
+    StartOf: (operation) => algebra.startOf(foldInstant(operation.base, algebra), operation.unit),
+  })(expression);
 
 interface RelativeOffset {
   readonly months: number;

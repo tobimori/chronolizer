@@ -230,10 +230,12 @@ A date filter has at least one bound. It can have one lower bound and one upper 
 | `lte` | On or before the value      |
 
 An expression starts with `now` or an ISO date. Operations run from left to right.
+Calendar shifts are not combined or canceled. For example, `2025-01-31||+1M+1M`
+resolves to March 28, not March 31. Each month shift clamps the day to the last
+valid day of that month. Time-zone gaps can also affect intermediate dates.
 
 ```text
-expression := anchor operation*
-anchor     := "now" | YYYY-MM-DD | YYYY-MM-DD "||"
+expression := "now" operation* | YYYY-MM-DD | YYYY-MM-DD "||" operation+
 operation  := ("+" | "-") positiveInteger unit | "/" unit
 unit       := "d" | "w" | "M" | "q" | "y"
 ```

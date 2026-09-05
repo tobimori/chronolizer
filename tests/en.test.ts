@@ -350,7 +350,7 @@ describe("English date ranges", () => {
   it.effect.each([
     ["from January 12", { gte: "now/y+11d" }],
     ["from 12th of January", { gte: "now/y+11d" }],
-    ["the day before January 12", { gte: "now/y+10d", lt: "now/y+11d" }],
+    ["the day before January 12", { gte: "now/y+11d-1d", lt: "now/y+11d" }],
     ["day before January 2025", { gte: "2025-01-01||-1d", lt: "2025-01-01" }],
     ["day before yesterday", { gte: "now-1d/d-1d", lt: "now-1d/d" }],
   ] as const)(
@@ -547,7 +547,7 @@ describe("English date ranges", () => {
     ["now to next Thursday", { gte: "now", lt: "now+1w/w+4d" }],
     ["next October", { gte: "now+1y/y+9M", lt: "now+1y/y+10M" }],
     ["start of year", { gte: "now/y", lt: "now/y+1d" }],
-    ["three days before start of month", { gte: "now/M-3d", lt: "now/M-2d" }],
+    ["three days before start of month", { gte: "now/M-3d", lt: "now/M+1d-3d" }],
   ] as const)(
     "maps concise English period %s",
     Effect.fn(function* (testCase) {
@@ -785,6 +785,9 @@ describe("English date ranges", () => {
     "2025",
     "through January 2025",
     "from 2024-02-29 to 2024-03-01",
+    "the day before January 12",
+    "the day before January 2025",
+    "three days before start of month",
   ])(
     "round-trips canonical English phrase %j",
     Effect.fn(function* (phrase) {

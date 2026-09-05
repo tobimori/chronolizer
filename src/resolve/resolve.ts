@@ -31,8 +31,7 @@ const shiftDateTime = (value: DateTime.Zoned, amount: number, unit: Unit) =>
 const startOfDateTime = (value: DateTime.Zoned, unit: Unit) => {
   if (unit === "quarter") {
     const month = DateTime.getPart(value, "month");
-    const quarterMonth = Math.floor((month - 1) / 3) * 3 + 1;
-    return DateTime.startOf(DateTime.setParts(value, { month: quarterMonth }), "month");
+    return DateTime.startOf(DateTime.subtract(value, { months: (month - 1) % 3 }), "month");
   }
   return DateTime.startOf(value, unit, { weekStartsOn: 1 });
 };

@@ -47,12 +47,13 @@ export const compoundCountAliases = (
   ones: ReadonlyArray<readonly [amount: number, word: string]>,
   join: (tensWord: string, oneWord: string, amount: number) => ReadonlyArray<string>,
 ) =>
-  tens.flatMap(([tensAmount, tensWord]) =>
-    ones.flatMap(([oneAmount, oneWord]) => {
+  tens.flatMap(([tensAmount, tensWord]) => [
+    [tensWord, tensAmount] as const,
+    ...ones.flatMap(([oneAmount, oneWord]) => {
       const amount = tensAmount + oneAmount;
       return join(tensWord, oneWord, amount).map((phrase) => [phrase, amount] as const);
     }),
-  );
+  ]);
 
 export const countAliasVocabulary = (aliases: ReadonlyArray<CountAlias>) => [
   ...new Set(aliases.flatMap(([phrase]) => phrase.split(" "))),
@@ -176,7 +177,7 @@ export const periodEndDay = (period: Period, canonical: string) =>
 export const periodDay = (period: Period, day: number, canonical: string) => {
   if (!Number.isInteger(day) || day < 1 || day > 28) return Option.none<Period>();
   const start = day === 1 ? period.start : shift(period.start, day - 1, "day");
-  return Option.some(Period.make({ start, end: shift(start, 1, "day"), canonical }));
+  return Option.some(Period.make({ start, end: shift(period.start, day, "day"), canonical }));
 };
 
 export const periodPreviousDay = (period: Period, canonical: string) =>
@@ -186,14 +187,14 @@ export const relativeWeekday = (day: number, direction: number, canonical: strin
   const weekBase = direction === 0 ? now() : shift(now(), direction, "week");
   const weekStart = startOf(weekBase, "week");
   const start = day === 0 ? weekStart : shift(weekStart, day, "day");
-  return Period.make({ start, end: shift(start, 1, "day"), canonical });
+  return Period.make({ start, end: shift(weekStart, day + 1, "day"), canonical });
 };
 
 export const relativeWeekend = (direction: number, canonical: string) => {
   const weekBase = direction === 0 ? now() : shift(now(), direction, "week");
   const weekStart = startOf(weekBase, "week");
   const start = shift(weekStart, 5, "day");
-  return Period.make({ start, end: shift(start, 2, "day"), canonical });
+  return Period.make({ start, end: shift(weekStart, 7, "day"), canonical });
 };
 
 const TrailingCount = Schema.Int.check(
@@ -390,7 +391,7 @@ const currentYearDatePeriod = (month: number, day: number, canonical: string) =>
   const yearStart = startOf(now(), "year");
   const monthStart = month === 1 ? yearStart : shift(yearStart, month - 1, "month");
   const start = day === 1 ? monthStart : shift(monthStart, day - 1, "day");
-  return Period.make({ start, end: shift(start, 1, "day"), canonical });
+  return Period.make({ start, end: shift(monthStart, day, "day"), canonical });
 };
 
 export const namedCurrentYearDatePeriod = (
@@ -484,7 +485,7 @@ export const monthOfRelativeYear = (month: number, direction: -1 | 0 | 1, canoni
   const start = month === 1 ? yearStart : shift(yearStart, month - 1, "month");
   return Period.make({
     start,
-    end: shift(start, 1, "month"),
+    end: shift(yearStart, month, "month"),
     canonical,
   });
 };

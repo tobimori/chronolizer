@@ -373,7 +373,7 @@ describe("French date ranges", () => {
     ["maintenant à jeudi prochain", { gte: "now", lt: "now+1w/w+4d" }],
     ["octobre prochain", { gte: "now+1y/y+9M", lt: "now+1y/y+10M" }],
     ["début de l'année", { gte: "now/y", lt: "now/y+1d" }],
-    ["début du mois il y a trois jours", { gte: "now/M-3d", lt: "now/M-2d" }],
+    ["début du mois il y a trois jours", { gte: "now/M-3d", lt: "now/M+1d-3d" }],
   ] as const)(
     "maps concise French period %s",
     Effect.fn(function* (testCase) {

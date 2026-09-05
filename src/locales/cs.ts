@@ -1,6 +1,5 @@
 import { Effect, Option, String as EffectString } from "effect";
 
-import { isIsoDate } from "../ast/schemas.ts";
 import type { DateRangeExpr, Unit } from "../ast/schemas.ts";
 import { BaseLanguageContribution } from "../language/model.ts";
 import { defineLanguagePlugin, languagePluginsLayer } from "../language/registry.ts";
@@ -23,14 +22,12 @@ import {
   decimalTens,
   datedPeriods,
   datedQuarterPeriods,
-  fixedDatePeriod,
   fixedMonthPeriod,
   fixedQuarterPeriod,
   fixedYearPeriod,
   fromNowRange,
   futurePeriod,
   futureRange,
-  isoDate,
   joinedNowCandidate,
   joinedPeriodCandidate,
   monthOfRelativeYear,
@@ -442,15 +439,13 @@ const parseNamedDate = (input: string) => {
     input,
   );
   if (Option.isSome(numeric)) {
-    const year = validYear(textAt(numeric.value, 3));
-    const month = Number(textAt(numeric.value, 2));
-    const day = Number(textAt(numeric.value, 1));
-    if (year !== undefined && month >= 1 && month <= 12) {
-      const value = isoDate(year, month, day);
-      if (isIsoDate(value) && value !== "9999-12-31") {
-        return Option.some(fixedDatePeriod(value, dateLabel(day, month, year)));
-      }
-    }
+    return namedDatePeriod(
+      textAt(numeric.value, 3),
+      textAt(numeric.value, 2),
+      textAt(numeric.value, 1),
+      Number,
+      dateLabel,
+    );
   }
 
   const current = EffectString.match(/^([0-3]?\d)\.? ([a-záčďéěíňóřšťúůýž]+\.?)$/u)(input);
@@ -803,7 +798,7 @@ const parseCzech = (input: string) => {
   if (Option.isSome(nowBounded)) return nowBounded;
 
   const bounded = joinedPeriodCandidate(
-    input,
+    input.replace(/ včetně$/u, ""),
     [
       ["od ", " do "],
       ["mezi ", " a "],

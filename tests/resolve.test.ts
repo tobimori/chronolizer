@@ -2,8 +2,10 @@ import { describe, expect, it } from "@effect/vitest";
 import { DateTime, Effect, Schema } from "effect";
 import { TestClock } from "effect/testing";
 
-import { parseFilter } from "../src/filter/codec.ts";
+import { formatFilter, parseFilter } from "../src/filter/codec.ts";
 import type { DateFilter } from "../src/filter/schema.ts";
+import { EnglishLanguageLayer } from "../src/locales/en.ts";
+import { parseNatural } from "../src/natural/parse.ts";
 import { resolve } from "../src/resolve/resolve.ts";
 import {
   ResolutionError,
@@ -71,6 +73,8 @@ describe("date-range resolution", () => {
   it.effect.each([
     ["2025-02-20T10:00:00.000Z", "2025-01-01", "2025-04-01"],
     ["2025-05-20T10:00:00.000Z", "2025-04-01", "2025-07-01"],
+    ["2025-05-31T10:00:00.000Z", "2025-04-01", "2025-07-01"],
+    ["2025-08-31T10:00:00.000Z", "2025-07-01", "2025-10-01"],
     ["2025-09-20T10:00:00.000Z", "2025-07-01", "2025-10-01"],
     ["2025-12-20T10:00:00.000Z", "2025-10-01", "2026-01-01"],
   ] as const)(
@@ -81,6 +85,31 @@ describe("date-range resolution", () => {
       const range = yield* resolveFilter({ gte: "now/q", lt: "now/q+1q" }, "UTC");
       expect(formatEndpoint(range.lower?.value)).toBe(`${lower}T00:00:00.000+00:00[UTC]`);
       expect(formatEndpoint(range.upper?.value)).toBe(`${upper}T00:00:00.000+00:00[UTC]`);
+    }),
+  );
+
+  it.effect.each([
+    ["2025-01-31||+1M+1M", "2025-03-28"],
+    ["2025-01-31||+1M-1M", "2025-01-28"],
+    ["2025-01-31||+1q-1q", "2025-01-30"],
+    ["2024-02-29||+1y-1y", "2024-02-28"],
+  ] as const)(
+    "resolves calendar shifts from left to right in %s",
+    Effect.fn(function* ([expression, expected]) {
+      const range = yield* resolveFilter({ gte: expression }, "UTC");
+      expect(formatEndpoint(range.lower?.value)).toBe(`${expected}T00:00:00.000+00:00[UTC]`);
+    }),
+  );
+
+  it.effect.each([
+    ["2025-03-29T01:30:00.000Z", "now+1d-1d", "2025-03-29T03:30:00.000+01:00[Europe/Berlin]"],
+    ["2025-03-23T01:30:00.000Z", "now+1w-1w", "2025-03-23T03:30:00.000+01:00[Europe/Berlin]"],
+  ] as const)(
+    "preserves intermediate daylight-saving gaps for %s",
+    Effect.fn(function* ([reference, expression, expected]) {
+      yield* setNow(reference);
+      const range = yield* resolveFilter({ gte: expression }, "Europe/Berlin");
+      expect(formatEndpoint(range.lower?.value)).toBe(expected);
     }),
   );
 
@@ -128,6 +157,37 @@ describe("date-range resolution", () => {
       expect(formatEndpoint(range.upper?.value)).toBe(
         "2018-11-05T00:00:00.000-02:00[America/Sao_Paulo]",
       );
+    }),
+  );
+
+  it.effect.each([
+    [
+      "November 4",
+      "2018-11-04T12:00:00.000Z",
+      "America/Sao_Paulo",
+      "2018-11-04T01:00:00.000-02:00[America/Sao_Paulo]",
+      "2018-11-05T00:00:00.000-02:00[America/Sao_Paulo]",
+    ],
+    [
+      "June",
+      "2008-06-15T12:00:00.000Z",
+      "Africa/Casablanca",
+      "2008-06-01T01:00:00.000+01:00[Africa/Casablanca]",
+      "2008-07-01T00:00:00.000+01:00[Africa/Casablanca]",
+    ],
+  ] as const)(
+    "uses independent calendar boundaries for %s across a midnight gap",
+    Effect.fn(function* ([input, reference, zone, lower, upper]) {
+      yield* setNow(reference);
+      const parsed = yield* parseNatural(input, { locale: "en" }).pipe(
+        Effect.provide(EnglishLanguageLayer),
+      );
+      const direct = yield* resolve(parsed.range).pipe(DateTime.withCurrentZoneNamed(zone));
+      const encoded = yield* resolveFilter(formatFilter(parsed.range), zone);
+      expect(formatEndpoint(direct.lower?.value)).toBe(lower);
+      expect(formatEndpoint(direct.upper?.value)).toBe(upper);
+      expect(formatEndpoint(encoded.lower?.value)).toBe(lower);
+      expect(formatEndpoint(encoded.upper?.value)).toBe(upper);
     }),
   );
 

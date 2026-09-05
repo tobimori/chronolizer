@@ -363,7 +363,7 @@ describe("Polish date ranges", () => {
     ["od dziś do następnego czwartku", { gte: "now", lt: "now+1w/w+4d" }],
     ["następny październik", { gte: "now+1y/y+9M", lt: "now+1y/y+10M" }],
     ["początek roku", { gte: "now/y", lt: "now/y+1d" }],
-    ["początek miesiąca trzy dni temu", { gte: "now/M-3d", lt: "now/M-2d" }],
+    ["początek miesiąca trzy dni temu", { gte: "now/M-3d", lt: "now/M+1d-3d" }],
   ] as const)(
     "maps concise Polish period %s",
     Effect.fn(function* (testCase) {

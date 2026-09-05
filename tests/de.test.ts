@@ -509,7 +509,7 @@ describe("German date ranges", () => {
     ["jetzt bis nächsten Donnerstag", { gte: "now", lt: "now+1w/w+4d" }],
     ["nächster Oktober", { gte: "now+1y/y+9M", lt: "now+1y/y+10M" }],
     ["Anfang des Jahres", { gte: "now/y", lt: "now/y+1d" }],
-    ["Anfang des Monats vor drei Tagen", { gte: "now/M-3d", lt: "now/M-2d" }],
+    ["Anfang des Monats vor drei Tagen", { gte: "now/M-3d", lt: "now/M+1d-3d" }],
   ] as const)(
     "maps concise German period %s",
     Effect.fn(function* (testCase) {

@@ -331,7 +331,7 @@ describe("Turkish date ranges", () => {
     ["şimdi ile gelecek perşembe arası", { gte: "now", lt: "now+1w/w+4d" }],
     ["gelecek ekim", { gte: "now+1y/y+9M", lt: "now+1y/y+10M" }],
     ["yılın başı", { gte: "now/y", lt: "now/y+1d" }],
-    ["üç gün önce ayın başı", { gte: "now/M-3d", lt: "now/M-2d" }],
+    ["üç gün önce ayın başı", { gte: "now/M-3d", lt: "now/M+1d-3d" }],
   ] as const)(
     "maps concise Turkish period %s",
     Effect.fn(function* (testCase) {

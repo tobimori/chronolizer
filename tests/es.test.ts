@@ -373,7 +373,7 @@ describe("Spanish date ranges", () => {
     ["ahora hasta el próximo jueves", { gte: "now", lt: "now+1w/w+4d" }],
     ["próximo octubre", { gte: "now+1y/y+9M", lt: "now+1y/y+10M" }],
     ["inicio del año", { gte: "now/y", lt: "now/y+1d" }],
-    ["inicio del mes hace tres días", { gte: "now/M-3d", lt: "now/M-2d" }],
+    ["inicio del mes hace tres días", { gte: "now/M-3d", lt: "now/M+1d-3d" }],
   ] as const)(
     "maps concise Spanish period %s",
     Effect.fn(function* (testCase) {

@@ -68,15 +68,14 @@ const formatUpper = Match.typeTags<UpperBound>()({
 });
 
 export const formatFilter = (range: DateRangeExpr) => {
-  const normalized = normalizeRange(range);
-  if (normalized.lower !== undefined && normalized.upper !== undefined) {
+  if (range.lower !== undefined && range.upper !== undefined) {
     return DateFilter.make({
-      ...formatLower(normalized.lower),
-      ...formatUpper(normalized.upper),
+      ...formatLower(range.lower),
+      ...formatUpper(range.upper),
     });
   }
-  if (normalized.lower !== undefined) return formatLower(normalized.lower);
-  return formatUpper(normalized.upper);
+  if (range.lower !== undefined) return formatLower(range.lower);
+  return formatUpper(range.upper);
 };
 
 export const rangeKey = (range: DateRangeExpr) => {

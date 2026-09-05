@@ -35,6 +35,7 @@ const parse = (input: string, locale: string, typoMode: "strict" | "tolerant" = 
 const cases = [
   {
     locale: "en",
+    tens: ["thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"],
     singular: "one week ago",
     singularDigits: "1 week ago",
     small: "two weeks ago",
@@ -49,6 +50,7 @@ const cases = [
   },
   {
     locale: "de",
+    tens: ["dreißig", "vierzig", "fünfzig", "sechzig", "siebzig", "achtzig", "neunzig"],
     singular: "vor einer woche",
     singularDigits: "vor 1 woche",
     small: "vor zwei wochen",
@@ -63,6 +65,7 @@ const cases = [
   },
   {
     locale: "es",
+    tens: ["treinta", "cuarenta", "cincuenta", "sesenta", "setenta", "ochenta", "noventa"],
     singular: "hace una semana",
     singularDigits: "hace 1 semana",
     small: "hace dos semanas",
@@ -77,6 +80,15 @@ const cases = [
   },
   {
     locale: "fr",
+    tens: [
+      "trente",
+      "quarante",
+      "cinquante",
+      "soixante",
+      "soixante-dix",
+      "quatre-vingts",
+      "quatre-vingt-dix",
+    ],
     singular: "il y a une semaine",
     singularDigits: "il y a 1 semaine",
     small: "il y a deux semaines",
@@ -91,6 +103,7 @@ const cases = [
   },
   {
     locale: "nl",
+    tens: ["dertig", "veertig", "vijftig", "zestig", "zeventig", "tachtig", "negentig"],
     singular: "een week geleden",
     singularDigits: "1 week geleden",
     small: "twee weken geleden",
@@ -105,6 +118,7 @@ const cases = [
   },
   {
     locale: "cs",
+    tens: ["třiceti", "čtyřiceti", "padesáti", "šedesáti", "sedmdesáti", "osmdesáti", "devadesáti"],
     singular: "před jedním týdnem",
     singularDigits: "před 1 týdnem",
     small: "před dvěma týdny",
@@ -119,6 +133,15 @@ const cases = [
   },
   {
     locale: "pl",
+    tens: [
+      "trzydzieści",
+      "czterdzieści",
+      "pięćdziesiąt",
+      "sześćdziesiąt",
+      "siedemdziesiąt",
+      "osiemdziesiąt",
+      "dziewięćdziesiąt",
+    ],
     singular: "jeden tydzień temu",
     singularDigits: "1 tydzień temu",
     small: "dwa tygodnie temu",
@@ -133,6 +156,7 @@ const cases = [
   },
   {
     locale: "tr",
+    tens: ["otuz", "kırk", "elli", "altmış", "yetmiş", "seksen", "doksan"],
     singular: "bir hafta önce",
     singularDigits: "1 hafta önce",
     small: "iki hafta önce",
@@ -148,6 +172,22 @@ const cases = [
 ] as const;
 
 describe("extensible written counts and period offsets", () => {
+  it.effect.each(cases)(
+    "parses whole written tens in $locale",
+    Effect.fn(function* (testCase) {
+      for (const [index, word] of testCase.tens.entries()) {
+        const input = testCase.smallDigits.replace("2", word);
+        const parsed = yield* parse(input, testCase.locale);
+        const amount = 30 + index * 10;
+        expect(formatFilter(parsed.range)).toEqual({
+          gte: `now-${amount}w/w`,
+          lt: `now-${amount}w/w+1w`,
+        });
+        expect(parsed.quality).toBe("exact");
+      }
+    }),
+  );
+
   it.effect.each(cases)(
     "parses simple written counts in $locale",
     Effect.fn(function* (testCase) {
@@ -257,6 +297,29 @@ describe("extensible written counts and period offsets", () => {
         Effect.provide(LanguagesLayer),
       );
       expect(suggestions.map((suggestion) => suggestion.text)).toEqual([expected]);
+    }),
+  );
+
+  it.effect.each([
+    ["en", "from January 4 2025 to January 22 2025"],
+    ["de", "von 4. Januar 2025 bis 22. Januar 2025"],
+    ["es", "desde 4 de enero de 2025 hasta 22 de enero de 2025"],
+    ["fr", "du 4 janvier 2025 au 22 janvier 2025"],
+    ["nl", "van 4 januari 2025 tot en met 22 januari 2025"],
+    ["cs", "od 4. ledna 2025 do 22. ledna 2025"],
+    ["pl", "od 4 stycznia 2025 do 22 stycznia 2025"],
+    ["tr", "4 ocak 2025 ile 22 ocak 2025 arası"],
+    ["tr", "bu ayın sonu"],
+    ["tr", "bu yılın başı"],
+  ] as const)(
+    "preserves the meaning of the standard phrase for %s: %s",
+    Effect.fn(function* ([locale, input]) {
+      const parsed = yield* parse(input, locale);
+      const rendered = yield* formatNatural(parsed.range, { locale }).pipe(
+        Effect.provide(LanguagesLayer),
+      );
+      const reparsed = yield* parse(rendered, locale);
+      expect(formatFilter(reparsed.range)).toEqual(formatFilter(parsed.range));
     }),
   );
 

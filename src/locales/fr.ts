@@ -1,6 +1,5 @@
 import { Effect, Option, String as EffectString } from "effect";
 
-import { isIsoDate } from "../ast/schemas.ts";
 import type { DateRangeExpr, Unit } from "../ast/schemas.ts";
 import { BaseLanguageContribution } from "../language/model.ts";
 import { defineLanguagePlugin, languagePluginsLayer } from "../language/registry.ts";
@@ -21,14 +20,12 @@ import {
   currentYearDatePeriods,
   datedPeriods,
   datedQuarterPeriods,
-  fixedDatePeriod,
   fixedMonthPeriod,
   fixedQuarterPeriod,
   fixedYearPeriod,
   fromNowRange,
   futurePeriod,
   futureRange,
-  isoDate,
   joinedNowCandidate,
   joinedPeriodCandidate,
   monthOfRelativeYear,
@@ -131,7 +128,8 @@ const frenchCompoundCountAliases = () => {
     if (tens <= 6) {
       const tensWord = ["", "", "vingt", "trente", "quarante", "cinquante", "soixante"][tens];
       if (tensWord === undefined) continue;
-      phrase = remainder === 1 ? `${tensWord} et un` : `${tensWord}-${words[remainder] ?? ""}`;
+      if (remainder === 0) phrase = tensWord;
+      else phrase = remainder === 1 ? `${tensWord} et un` : `${tensWord}-${words[remainder] ?? ""}`;
     } else if (tens === 7) {
       phrase = remainder === 1 ? "soixante et onze" : `soixante-${words[10 + remainder] ?? ""}`;
     } else if (tens === 8) {
@@ -429,15 +427,13 @@ const parseNamedDate = (input: string) => {
   }
   const numeric = EffectString.match(/^([0-3]?\d)[./-]([01]?\d)[./-](\d{4})$/u)(input);
   if (Option.isSome(numeric)) {
-    const year = validYear(textAt(numeric.value, 3));
-    const month = Number(textAt(numeric.value, 2));
-    const day = Number(textAt(numeric.value, 1));
-    if (year !== undefined && month >= 1 && month <= 12) {
-      const value = isoDate(year, month, day);
-      if (isIsoDate(value) && value !== "9999-12-31") {
-        return Option.some(fixedDatePeriod(value, dateLabel(day, month, year)));
-      }
-    }
+    return namedDatePeriod(
+      textAt(numeric.value, 3),
+      textAt(numeric.value, 2),
+      textAt(numeric.value, 1),
+      Number,
+      dateLabel,
+    );
   }
 
   const current = EffectString.match(

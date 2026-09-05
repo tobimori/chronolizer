@@ -2,7 +2,6 @@ import { Effect, Match } from "effect";
 
 import { dateLiteral, now, shift, startOf } from "../ast/constructors.ts";
 import { foldInstant } from "../ast/fold.ts";
-import { normalizeInstant } from "../ast/normalize.ts";
 import { isIsoDate } from "../ast/schemas.ts";
 import type { InstantExpr, IsoDate, Unit } from "../ast/schemas.ts";
 import { FilterExpressionParseError } from "./errors.ts";
@@ -116,10 +115,15 @@ const appendOperation = (base: PrintedExpression, operation: string) => ({
 });
 
 export const formatInstantExpression = (expression: InstantExpr) =>
-  foldInstant<PrintedExpression>(normalizeInstant(expression), {
+  foldInstant<PrintedExpression>(expression, {
     now: () => ({ text: "now", fixedAnchor: false }),
     dateLiteral: (value: IsoDate) => ({ text: value, fixedAnchor: true }),
     shift: (base, amount, unit) =>
-      appendOperation(base, `${amount < 0 ? "-" : "+"}${Math.abs(amount)}${symbolFromUnit(unit)}`),
+      amount === 0
+        ? base
+        : appendOperation(
+            base,
+            `${amount < 0 ? "-" : "+"}${Math.abs(amount)}${symbolFromUnit(unit)}`,
+          ),
     startOf: (base, unit) => appendOperation(base, `/${symbolFromUnit(unit)}`),
   }).text;
