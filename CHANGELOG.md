@@ -1,5 +1,11 @@
 # chronolizer
 
+## 0.4.1
+
+### Patch Changes
+
+- 0cba554: Parse German contextual ranges with compact aliases, and reduce duplicate inflection matching in German and French.
+
 ## 0.4.0
 
 ### Minor Changes
