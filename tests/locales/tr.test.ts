@@ -1,14 +1,14 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 
-import { formatFilter } from "../src/filter/codec.ts";
-import { TurkishLanguageLayer } from "../src/locales/tr.ts";
+import { formatFilter } from "../../src/filter/codec.ts";
+import { TurkishLanguageLayer } from "../../src/locales/tr.ts";
 import {
   formatNatural,
   NaturalLanguageParseError,
   parseNatural,
   suggestNatural,
-} from "../src/index.ts";
+} from "../../src/index.ts";
 
 const parseTurkish = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "tr", typoMode }).pipe(Effect.provide(TurkishLanguageLayer));
@@ -303,6 +303,16 @@ describe("Turkish date ranges", () => {
       const [input, gte, lt] = testCase;
       expect(formatFilter((yield* parseTurkish(input)).range)).toEqual({ gte, lt });
     }),
+  );
+
+  it.effect.each(["bu ayın sonu", "bu yılın başı"])(
+    "round-trips Turkish period edge %j",
+    Effect.fn(function* (input) {
+      const parsed = yield* parseTurkish(input);
+      const rendered = yield* formatNatural(parsed.range, { locale: "tr" });
+      const reparsed = yield* parseTurkish(rendered);
+      expect(formatFilter(reparsed.range)).toEqual(formatFilter(parsed.range));
+    }, Effect.provide(TurkishLanguageLayer)),
   );
 
   it.effect.each([

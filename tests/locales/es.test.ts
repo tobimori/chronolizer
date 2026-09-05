@@ -1,14 +1,14 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 
-import { formatFilter } from "../src/filter/codec.ts";
-import { SpanishLanguageLayer } from "../src/locales/es.ts";
+import { formatFilter } from "../../src/filter/codec.ts";
+import { SpanishLanguageLayer } from "../../src/locales/es.ts";
 import {
   formatNatural,
   NaturalLanguageParseError,
   parseNatural,
   suggestNatural,
-} from "../src/index.ts";
+} from "../../src/index.ts";
 
 const parseSpanish = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "es", typoMode }).pipe(Effect.provide(SpanishLanguageLayer));
@@ -410,6 +410,19 @@ describe("Spanish date ranges", () => {
     Effect.fn(function* (input) {
       const error = yield* Effect.flip(parseSpanish(input));
       expect(error).toBeInstanceOf(NaturalLanguageParseError);
+    }),
+  );
+
+  it.effect(
+    "corrects missing separators in a Spanish written count",
+    Effect.fn(function* () {
+      const corrected = yield* parseSpanish("hace noventaynueve semanas", "tolerant");
+      expect(formatFilter(corrected.range)).toEqual(
+        formatFilter((yield* parseSpanish("hace 99 semanas")).range),
+      );
+      expect(corrected.corrections).toContainEqual(
+        expect.objectContaining({ original: "noventaynueve", replacement: "noventa y nueve" }),
+      );
     }),
   );
 

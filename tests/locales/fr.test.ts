@@ -1,14 +1,14 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 
-import { formatFilter } from "../src/filter/codec.ts";
-import { FrenchLanguageLayer } from "../src/locales/fr.ts";
+import { formatFilter } from "../../src/filter/codec.ts";
+import { FrenchLanguageLayer } from "../../src/locales/fr.ts";
 import {
   formatNatural,
   NaturalLanguageParseError,
   parseNatural,
   suggestNatural,
-} from "../src/index.ts";
+} from "../../src/index.ts";
 
 const parseFrench = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "fr", typoMode }).pipe(Effect.provide(FrenchLanguageLayer));

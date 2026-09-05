@@ -1,14 +1,14 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 
-import { formatFilter } from "../src/filter/codec.ts";
-import { PolishLanguageLayer } from "../src/locales/pl.ts";
+import { formatFilter } from "../../src/filter/codec.ts";
+import { PolishLanguageLayer } from "../../src/locales/pl.ts";
 import {
   formatNatural,
   NaturalLanguageParseError,
   parseNatural,
   suggestNatural,
-} from "../src/index.ts";
+} from "../../src/index.ts";
 
 const parsePolish = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "pl", typoMode }).pipe(Effect.provide(PolishLanguageLayer));

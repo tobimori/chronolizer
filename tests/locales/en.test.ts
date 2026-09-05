@@ -1,15 +1,15 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 
-import { formatFilter, parseFilter } from "../src/filter/codec.ts";
-import { EnglishLanguageLayer } from "../src/locales/en.ts";
+import { formatFilter, parseFilter } from "../../src/filter/codec.ts";
+import { EnglishLanguageLayer } from "../../src/locales/en.ts";
 import {
   formatNatural,
   NaturalLanguageParseError,
   NaturalLanguageRenderError,
   parseNatural,
   suggestNatural,
-} from "../src/index.ts";
+} from "../../src/index.ts";
 
 const parseEnglish = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "en", typoMode }).pipe(Effect.provide(EnglishLanguageLayer));
@@ -52,6 +52,20 @@ describe("English date ranges", () => {
     Effect.fn(function* () {
       const suggestions = yield* suggestEnglish("january 202", 2);
       expect(suggestions.map((entry) => entry.text)).toEqual(["January 2020", "January 2021"]);
+    }),
+  );
+
+  it.effect.each([
+    ["last twenty-one w", "last 21 weeks"],
+    ["now to next thursday", "from now to next Thursday"],
+    ["start year", "start of this year"],
+    ["three days before start month", "3 days before start of month"],
+    ["last week to", "from last week to today"],
+  ] as const)(
+    "completes non-canonical English input %j",
+    Effect.fn(function* ([input, expected]) {
+      const suggestions = yield* suggestEnglish(input, 1);
+      expect(suggestions.map((suggestion) => suggestion.text)).toEqual([expected]);
     }),
   );
 
@@ -670,6 +684,28 @@ describe("English date ranges", () => {
   );
 
   it.effect(
+    "corrects a missing separator in an English written count",
+    Effect.fn(function* () {
+      const spaced = yield* parseEnglish("twenty one weeks ago");
+      expect(formatFilter(spaced.range)).toEqual(
+        formatFilter((yield* parseEnglish("21 weeks ago")).range),
+      );
+
+      const strictError = yield* Effect.flip(parseEnglish("twentyone weeks ago"));
+      expect(strictError).toBeInstanceOf(NaturalLanguageParseError);
+
+      const corrected = yield* parseEnglish("twentyone weeks ago", "tolerant");
+      expect(corrected.quality).toBe("corrected");
+      expect(formatFilter(corrected.range)).toEqual(
+        formatFilter((yield* parseEnglish("21 weeks ago")).range),
+      );
+      expect(corrected.corrections).toContainEqual(
+        expect.objectContaining({ original: "twentyone", replacement: "twenty one" }),
+      );
+    }),
+  );
+
+  it.effect(
     "does not run typo correction in strict mode",
     Effect.fn(function* () {
       const error = yield* Effect.flip(parseEnglish("januray 2025"));
@@ -788,6 +824,7 @@ describe("English date ranges", () => {
     "the day before January 12",
     "the day before January 2025",
     "three days before start of month",
+    "yesterday two weeks ago three months ago",
   ])(
     "round-trips canonical English phrase %j",
     Effect.fn(function* (phrase) {

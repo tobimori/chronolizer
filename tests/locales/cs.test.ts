@@ -1,14 +1,14 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 
-import { formatFilter } from "../src/filter/codec.ts";
-import { CzechLanguageLayer } from "../src/locales/cs.ts";
+import { formatFilter } from "../../src/filter/codec.ts";
+import { CzechLanguageLayer } from "../../src/locales/cs.ts";
 import {
   formatNatural,
   NaturalLanguageParseError,
   parseNatural,
   suggestNatural,
-} from "../src/index.ts";
+} from "../../src/index.ts";
 
 const parseCzech = (input: string, typoMode: "strict" | "tolerant" = "strict") =>
   parseNatural(input, { locale: "cs", typoMode }).pipe(Effect.provide(CzechLanguageLayer));
