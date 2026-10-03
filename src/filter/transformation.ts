@@ -13,7 +13,7 @@ const expressionIssue = (input: string, offset: number, expected: string) =>
 export const InstantExpressionFromString = Schema.String.pipe(
   Schema.decodeTo(
     InstantExpr,
-    SchemaTransformation.transformOrFail({
+    SchemaTransformation.transformEffect({
       decode: (input) =>
         Effect.mapError(parseInstantExpression(input), (error) =>
           expressionIssue(error.input, error.offset, error.expected),
@@ -26,7 +26,7 @@ export const InstantExpressionFromString = Schema.String.pipe(
 export const DateRangeFromFilter = DateFilter.pipe(
   Schema.decodeTo(
     DateRangeExpr,
-    SchemaTransformation.transformOrFail({
+    SchemaTransformation.transformEffect({
       decode: (filter) =>
         Effect.mapError(
           parseFilter(filter),

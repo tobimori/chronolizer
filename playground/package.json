@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "chronolizer": "workspace:*",
-    "effect": "4.0.0-rc.112"
+    "effect": "4.0.0"
   },
   "devDependencies": {
     "vite": "catalog:",

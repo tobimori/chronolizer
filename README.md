@@ -8,15 +8,12 @@ January of last year  → { gte: "now-1y/y", lt: "now-1y/y+1M" }
 since January 2025    → { gte: "2025-01-01" }
 ```
 
-> [!NOTE]
-> Chronolizer currently uses `effect@4.0.0-rc.112`. Effect 4 is not stable yet, so its API can change.
-
 ## Install Chronolizer
 
 Chronolizer requires Effect 4 and uses ES modules. Install both packages:
 
 ```sh
-pnpm add chronolizer effect@4.0.0-rc.112
+pnpm add chronolizer effect@4
 ```
 
 ## Parse your first date range

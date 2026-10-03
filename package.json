@@ -44,17 +44,17 @@
     "prepare": "effect-tsgo patch --typescript --oxlint"
   },
   "dependencies": {
-    "effect": "4.0.0-rc.112"
+    "effect": "4.0.0"
   },
   "devDependencies": {
     "@arethetypeswrong/core": "0.18.5",
     "@changesets/cli": "3.0.1",
-    "@effect/tsgo": "0.38.0",
-    "@effect/vitest": "4.0.0-rc.112",
-    "@oxlint/plugins": "1.80.0",
+    "@effect/tsgo": "0.48.0",
+    "@effect/vitest": "4.0.0",
+    "@oxlint/plugins": "1.85.0",
     "@types/node": "^26.1.1",
-    "oxlint": "1.80.0",
-    "oxlint-tsgolint": "7.0.2001",
+    "oxlint": "1.85.0",
+    "oxlint-tsgolint": "7.0.2003",
     "publint": "^0.3.24",
     "typescript": "^7.0.2",
     "vite": "catalog:",
