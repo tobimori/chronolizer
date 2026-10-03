@@ -1,5 +1,11 @@
 # chronolizer
 
+## 0.5.0
+
+### Minor Changes
+
+- 13d2258: Use the stable `effect@4.0.0` release.
+
 ## 0.4.1
 
 ### Patch Changes
